@@ -509,3 +509,7 @@
 "Пока не определено — дослушайте пару песен до конца" = "Not detected yet — let a couple of songs play through";
 "Сбросить определение" = "Reset Detection";
 "Авто оценивает переход по естественным сменам треков отдельно для Spotify и Apple Music. Вручную можно указать настройку музыкального приложения. Это не меняет звук." = "Automatic mode estimates transitions from natural track changes separately for Spotify and Apple Music. Manual mode lets you match your music app setting. This does not change audio.";
+"Поставить звезду на GitHub" = "Star on GitHub";
+"Скрыть" = "Hide";
+"«Звезда на GitHub» в настройках" = "“Star on GitHub” in Settings";
+"Строка внизу главной страницы настроек. Её можно скрыть и свайпом влево." = "The row at the bottom of the main Settings page. You can also hide it by swiping left.";

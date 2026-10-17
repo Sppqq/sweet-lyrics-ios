@@ -189,6 +189,8 @@ final class AppSettings {
     var notifyUpdates: Bool { didSet { defaults.set(notifyUpdates, forKey: Keys.notifyUpdates) } }
     /// A release the user chose to skip: no notice for it, only for a newer one.
     var skippedUpdateVersion: String { didSet { defaults.set(skippedUpdateVersion, forKey: Keys.skippedUpdateVersion) } }
+    /// The "star on GitHub" row on the main settings page.
+    var showStarRow: Bool { didSet { defaults.set(showStarRow, forKey: Keys.showStarRow) } }
     /// Random, made once per install: tells reports from one phone apart, and nothing else.
     let installID: String
 
@@ -270,6 +272,7 @@ final class AppSettings {
             Keys.reportConsent: 0,
             Keys.lastSeenVersion: "",
             Keys.notifyUpdates: true,
+            Keys.showStarRow: true,
             Keys.closePiPOnReturn: true,
         ])
         spotifyClientID = defaults.string(forKey: Keys.clientID) ?? ""
@@ -344,6 +347,7 @@ final class AppSettings {
         lastSeenVersion = defaults.string(forKey: Keys.lastSeenVersion) ?? ""
         notifyUpdates = defaults.bool(forKey: Keys.notifyUpdates)
         skippedUpdateVersion = defaults.string(forKey: Keys.skippedUpdateVersion) ?? ""
+        showStarRow = defaults.bool(forKey: Keys.showStarRow)
         let install = defaults.string(forKey: Keys.installID) ?? UUID().uuidString
         defaults.set(install, forKey: Keys.installID)
         installID = install
@@ -539,6 +543,7 @@ final class AppSettings {
         static let lastSeenVersion = "lastSeenVersion"
         static let notifyUpdates = "notifyUpdates"
         static let skippedUpdateVersion = "skippedUpdateVersion"
+        static let showStarRow = "showStarRow"
         static let installID = "installID"
     }
 }

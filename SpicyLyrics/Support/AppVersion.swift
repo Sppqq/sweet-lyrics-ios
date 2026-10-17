@@ -20,3 +20,8 @@ enum AppVersion {
         (Bundle.main.object(forInfoDictionaryKey: key) as? String)?.nilIfBlank
     }
 }
+
+enum AppLinks {
+    /// This app's repository: the star row in Settings and Settings → About open it.
+    static let repository = URL(string: "https://github.com/Sppqq/sweet-lyrics-ios")!
+}

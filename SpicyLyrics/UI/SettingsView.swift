@@ -74,6 +74,7 @@ struct SettingsView: View {
                 Section {
                     category(String(localized: "О приложении"), "info.circle.fill", .gray,
                              value: updates.latest.map { String(localized: "Есть \($0.version)") } ?? AppVersion.display) { AboutSettings() }
+                    if settings.showStarRow { starRow }
                 }
             }
             .settingsPage()
@@ -105,18 +106,7 @@ struct SettingsView: View {
                 .navigationBarTitleDisplayMode(.inline)
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 29, height: 29)
-                    .background {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(LinearGradient(colors: [color.opacity(0.85), color], startPoint: .top, endPoint: .bottom))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                    .strokeBorder(.white.opacity(0.22), lineWidth: 0.5)
-                            }
-                    }
+                categoryIcon(icon, color)
                 Text(title)
                 Spacer(minLength: 8)
                 if let value {
@@ -127,6 +117,44 @@ struct SettingsView: View {
             }
         }
         .listRowBackground(Color.white.opacity(0.09))
+    }
+
+    private func categoryIcon(_ icon: String, _ color: Color) -> some View {
+        Image(systemName: icon)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 29, height: 29)
+            .background {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(LinearGradient(colors: [color.opacity(0.85), color], startPoint: .top, endPoint: .bottom))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(.white.opacity(0.22), lineWidth: 0.5)
+                    }
+            }
+    }
+
+    /// Opens the repository: free app, a star is the thanks.
+    private var starRow: some View {
+        Link(destination: AppLinks.repository) {
+            HStack(spacing: 12) {
+                categoryIcon("star.fill", .yellow)
+                Text(String(localized: "Поставить звезду на GitHub"))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.up.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .listRowBackground(Color.white.opacity(0.09))
+        // Swipe to hide; Settings → About brings it back.
+        .swipeActions {
+            Button(String(localized: "Скрыть")) {
+                withAnimation { settings.showStarRow = false }
+            }
+            .tint(.gray)
+        }
     }
 }
 
@@ -994,10 +1022,15 @@ private struct AboutSettings: View {
             Section {
                 Link(String(localized: "Spicy Lyrics (оригинал)"), destination: URL(string: "https://github.com/Spikerko/spicy-lyrics")!)
                 Link("Spicy Lyrics Mobile (Android)", destination: URL(string: "https://github.com/spicylyrics/mobile")!)
-                Link(String(localized: "Этот проект на GitHub"), destination: URL(string: "https://github.com/Sppqq/sweet-lyrics-ios")!)
+                Link(String(localized: "Этот проект на GitHub"), destination: AppLinks.repository)
                 Link("LRCLIB", destination: URL(string: "https://lrclib.net")!)
             } footer: {
                 Text(String(localized: "Неофициальный iOS-порт. Распространяется по лицензии AGPL-3.0, как и оригинал. Не связан со Spotify AB."))
+            }
+            Section {
+                Toggle(String(localized: "«Звезда на GitHub» в настройках"), isOn: $settings.showStarRow)
+            } footer: {
+                Text(String(localized: "Строка внизу главной страницы настроек. Её можно скрыть и свайпом влево."))
             }
         }
     }
