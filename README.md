@@ -27,6 +27,12 @@ the popular Spicetify extension for Spotify on desktop. Made by
 <p align="center"><sub>Turn your phone sideways</sub></p>
 
 <p align="center">
+  <img src="docs/media/ipad.webp" width="300" alt="iPad: the player next to the lyrics">
+  <img src="docs/media/tv.webp" width="560" alt="Full-screen lyrics on a TV over Screen Mirroring">
+</p>
+<p align="center"><sub>iPad · lyrics on your TV, with your phone as the remote</sub></p>
+
+<p align="center">
   <img src="docs/media/styles.webp" width="250" alt="The same song in three looks">
   <img src="docs/media/romanization.webp" width="250" alt="Russian lyrics written in Latin letters">
   <img src="docs/media/artwork.webp" width="250" alt="Big artwork with the line being sung under it">
@@ -52,8 +58,7 @@ the popular Spicetify extension for Spotify on desktop. Made by
 - **Big artwork mode**: the quote button at the bottom left swaps the lyrics for a large cover
   with the current line under it.
 - **Lyrics on your TV**: turn on Screen Mirroring (AirPlay) or plug in a display, and it shows
-  full-screen lyrics like the desktop extension, while your phone stays the remote
-  ([see it](docs/media/tv-mirroring.mp4)).
+  full-screen lyrics like the desktop extension, while your phone stays the remote.
 - **Floating lyrics (Picture in Picture)**: keep the current line on screen over other apps.
 - **Lyrics in other languages**: Japanese, Chinese, Korean, Russian and Greek can be shown in
   Latin letters, and any song can be translated line by line.
