@@ -303,6 +303,8 @@
 "Насыщенность шрифта" = "Font Weight";
 "Положение активной строки" = "Active Line Position";
 "Скорость прокрутки" = "Scroll Speed";
+"Раннее пролистывание" = "Early Scroll";
+"Время раннего пролистывания" = "Early Scroll Time";
 "Прокрутка" = "Scrolling";
 "Где держится строка, которую поют, и как быстро текст доезжает до следующей." = "Where the line being sung stays, and how fast the lyrics glide to the next one.";
 "Выше на %lld%%" = "%lld%% higher";

@@ -208,6 +208,9 @@ final class AppSettings {
     var activeLinePosition: Double { didSet { defaults.set(activeLinePosition, forKey: Keys.activeLinePosition) } }
     /// × the speed of the glide to the next line.
     var scrollSpeed: Double { didSet { defaults.set(scrollSpeed, forKey: Keys.scrollSpeed) } }
+    /// Start scrolling to the next line a bit before it is sung.
+    var earlyScroll: Bool { didSet { defaults.set(earlyScroll, forKey: Keys.earlyScroll) } }
+    var earlyScrollMs: Double { didSet { defaults.set(earlyScrollMs, forKey: Keys.earlyScrollMs) } }
     /// × the brightness of the translation under a line.
     var translationBrightness: Double { didSet { defaults.set(translationBrightness, forKey: Keys.translationBrightness) } }
     /// × the saturation of the cover behind the lyrics (app and PiP).
@@ -311,6 +314,8 @@ final class AppSettings {
             Keys.lyricsWeight: LyricsWeight.bold.rawValue,
             Keys.activeLinePosition: 0.5,
             Keys.scrollSpeed: 1.0,
+            Keys.earlyScroll: false,
+            Keys.earlyScrollMs: 250.0,
             Keys.translationBrightness: 1.0,
             Keys.backgroundSaturation: 1.0,
             Keys.lyricsFrameRate: 60.0,
@@ -392,6 +397,8 @@ final class AppSettings {
         lyricsWeight = defaults.string(forKey: Keys.lyricsWeight) ?? LyricsWeight.bold.rawValue
         activeLinePosition = defaults.double(forKey: Keys.activeLinePosition)
         scrollSpeed = defaults.double(forKey: Keys.scrollSpeed)
+        earlyScroll = defaults.bool(forKey: Keys.earlyScroll)
+        earlyScrollMs = defaults.double(forKey: Keys.earlyScrollMs)
         translationBrightness = defaults.double(forKey: Keys.translationBrightness)
         backgroundSaturation = defaults.double(forKey: Keys.backgroundSaturation)
         lyricsFrameRate = defaults.double(forKey: Keys.lyricsFrameRate)
@@ -477,6 +484,8 @@ final class AppSettings {
         lyricsWeight = LyricsWeight.bold.rawValue
         activeLinePosition = 0.5
         scrollSpeed = 1
+        earlyScroll = false
+        earlyScrollMs = 250
     }
 
     /// The translation's own look (its page in settings).
@@ -605,6 +614,8 @@ final class AppSettings {
         static let pipFormat = "pipFormat"
         static let activeLinePosition = "activeLinePosition"
         static let scrollSpeed = "scrollSpeed"
+        static let earlyScroll = "earlyScroll"
+        static let earlyScrollMs = "earlyScrollMs"
         static let translationBrightness = "translationBrightness"
         static let backgroundSaturation = "backgroundSaturation"
         static let lyricsFrameRate = "lyricsFrameRate"

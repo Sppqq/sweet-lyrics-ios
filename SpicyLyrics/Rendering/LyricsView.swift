@@ -113,6 +113,11 @@ struct LyricsView: View {
                                               blurEnabled: settings.blurInactiveLines && !userScrolling && !reduced,
                                               frameInterval: frameInterval)
                         let focus = animator.focusIndex
+                        // Early scroll: the line the scroll follows is the one that starts shortly.
+                        let scrollFocus = settings.earlyScroll && shown.kind != .static && !animator.lyrics.lines.isEmpty
+                            ? LyricsAnimator.focus(in: animator.lyrics.lines,
+                                                   at: player.position(at: now) + clockOffset + settings.earlyScrollMs / 1000)
+                            : focus
                         let visuals = animator.visuals
 
                         let _ = culling.sync(CullingKey(typography: typography, topInset: topInset, bottomInset: bottomInset,
@@ -139,7 +144,7 @@ struct LyricsView: View {
                             guard inVisibleArea(point.y, viewport: geometry.size.height) else { return }
                             onBackgroundTap()
                         }
-                        .onChange(of: focus) { _, newFocus in
+                        .onChange(of: scrollFocus) { _, newFocus in
                             guard shown.kind != .static, !userScrolling, Date() >= resumeAutoScrollAt else { return }
                             // After a seek or a gap (back from the background or PiP) jump to the
                             // line: gliding across half the song would show it was ever behind.

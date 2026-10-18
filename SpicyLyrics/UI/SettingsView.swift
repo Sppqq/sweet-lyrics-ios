@@ -281,6 +281,11 @@ private struct TextLookSettings: View {
                 SliderRow(title: String(localized: "Положение активной строки"), value: $settings.activeLinePosition,
                           range: 0.2...0.8, step: 0.05, format: Self.positionLabel)
                 SliderRow(title: String(localized: "Скорость прокрутки"), value: $settings.scrollSpeed, range: 0.5...3, step: 0.25)
+                Toggle(String(localized: "Раннее пролистывание"), isOn: $settings.earlyScroll)
+                if settings.earlyScroll {
+                    SliderRow(title: String(localized: "Время раннего пролистывания"), value: $settings.earlyScrollMs,
+                              range: 0...1000, step: 50, format: { "\(Int($0)) ms" })
+                }
             } header: {
                 Text(String(localized: "Прокрутка"))
             } footer: {

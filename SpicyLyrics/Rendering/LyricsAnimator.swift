@@ -386,7 +386,7 @@ final class LyricsAnimator {
     private static let duetWindow: Double = 0.6
 
     /// The last line that has started (so the view stays on a line through short gaps).
-    private static func focus(in lines: [PreparedLine], at time: Double) -> Int {
+    static func focus(in lines: [PreparedLine], at time: Double) -> Int {
         var low = 0, high = lines.count - 1, found = 0
         while low <= high {
             let mid = (low + high) / 2
