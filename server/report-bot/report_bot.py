@@ -198,9 +198,12 @@ def publish(job, source, changed, result, report):
         # An interrupted preparation is safe to rebuild: nothing has been pushed yet.
         if repo.exists():
             shutil.rmtree(repo)
-        command(["git", "clone", "--quiet", "--branch", "main", f"https://github.com/{REPO}.git", str(repo)])
+        pinned = (job / "commit").read_text().strip()
+        command(["git", "clone", "--quiet", "--depth", "1", "--no-checkout", "--branch", "main",
+                 f"https://github.com/{REPO}.git", str(repo)])
         # Pin to the source commit so the proposed diff cannot silently incorporate a newer main.
-        command(["git", "checkout", "-b", branch, (job / "commit").read_text().strip()], repo)
+        command(["git", "fetch", "--quiet", "--depth", "1", "origin", pinned], repo)
+        command(["git", "checkout", "-b", branch, pinned], repo)
         for name in changed:
             target = repo / name
             if (source / name).exists():
@@ -262,11 +265,11 @@ def analyze(state, report, previous):
     auth.mkdir()
     # Minimal private auth copy: no server configuration, MCPs, history, SSH or home directory.
     shutil.copyfile(state / "auth.json", auth / "auth.json")
-    command(["git", "clone", "--quiet", f"https://github.com/{REPO}.git", str(source)])
+    command(["git", "clone", "--quiet", "--depth", "1", f"https://github.com/{REPO}.git", str(source)])
     prs = github("pulls?state=open&per_page=100")
     branch = "bot/report-" + report["report"]["id"][:8]
     if any(p["head"]["ref"] == branch and p["head"].get("repo", {}).get("full_name") == REPO for p in prs):
-        command(["git", "fetch", "origin", "refs/heads/" + branch], source)
+        command(["git", "fetch", "--depth", "1", "origin", "refs/heads/" + branch], source)
         command(["git", "checkout", "--detach", "FETCH_HEAD"], source)
     (job / "commit").write_text(command(["git", "rev-parse", "HEAD"], source))
     shutil.rmtree(source / ".git")
@@ -341,6 +344,11 @@ def analyze(state, report, previous):
     finally:
         subprocess.run(["docker", "rm", "-f", container], capture_output=True)
         shutil.rmtree(auth, ignore_errors=True)
+        if not (job / "repair.json").exists():
+            # Nothing to recover or publish: drop the repo copy and report input right away
+            # instead of keeping a full clone per attempt for 14 days.
+            for name in ("source", "input", "output", "publish"):
+                shutil.rmtree(job / name, ignore_errors=True)
 
 
 def save_task(db, report, result, pr, manual_review=False):
@@ -442,15 +450,27 @@ def main():
                     print("Reply delivery failed; private state retained for retry.", file=sys.stderr)
         inbox = request(BASE + "/v1/bot/inbox", os.environ["BOT_TOKEN"])["reports"]
         processed = 0
+        failures_path = args.state / "failures.json"
+        try:
+            failures = json.loads(failures_path.read_text())
+        except (OSError, ValueError):
+            failures = {}
         for item in inbox:
+            entry = failures.get(str(item.get("id")))
+            if entry and entry["next"] > time.time():
+                continue  # Exponential backoff: a failing report must not rerun every 5 minutes.
             try:
                 if process_report(db, args, item) is False:
                     continue  # Unchanged manual-review items must not consume the eight-task budget.
+                failures.pop(str(item.get("id")), None)
             except Exception:
                 print("Report processing failed; private state retained for retry.", file=sys.stderr)
+                count = (entry["count"] if entry else 0) + 1
+                failures[str(item.get("id"))] = {"count": count, "next": time.time() + min(300 * 2 ** count, 6 * 3600)}
             processed += 1
             if processed >= 8:
                 break
+        failures_path.write_text(json.dumps(failures))
         # Reports/logs are private and bounded; permanent task records are kept separately.
         for job in args.state.glob("job-*"):
             if job.is_dir() and job.stat().st_mtime < time.time() - 14 * 86400:
