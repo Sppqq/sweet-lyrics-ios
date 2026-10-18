@@ -187,6 +187,9 @@ final class AppSettings {
     var lastSeenVersion: String { didSet { defaults.set(lastSeenVersion, forKey: Keys.lastSeenVersion) } }
     /// Tell about a newer stable release (Settings → About).
     var notifyUpdates: Bool { didSet { defaults.set(notifyUpdates, forKey: Keys.notifyUpdates) } }
+    /// Start scrolling to the next line a bit before it is sung.
+    var earlyScroll: Bool { didSet { defaults.set(earlyScroll, forKey: Keys.earlyScroll) } }
+    var earlyScrollMs: Double { didSet { defaults.set(earlyScrollMs, forKey: Keys.earlyScrollMs) } }
     /// A release the user chose to skip: no notice for it, only for a newer one.
     var skippedUpdateVersion: String { didSet { defaults.set(skippedUpdateVersion, forKey: Keys.skippedUpdateVersion) } }
     /// The "star on GitHub" row on the main settings page.
@@ -288,6 +291,8 @@ final class AppSettings {
         powerSaving = defaults.bool(forKey: Keys.powerSaving)
         showVolumeSlider = defaults.bool(forKey: Keys.volumeSlider)
         gesturesEnabled = defaults.bool(forKey: Keys.gestures)
+            Keys.earlyScroll: false,
+            Keys.earlyScrollMs: 250.0,
         compensateOutputLatency = defaults.bool(forKey: Keys.outputLatency)
         useAppRemote = defaults.object(forKey: Keys.appRemote) as? Bool ?? true
         webPollInterval = defaults.object(forKey: Keys.webPollInterval) as? Double ?? 2
@@ -370,6 +375,8 @@ final class AppSettings {
     var validSpicyKey: String? {
         bundledSpicyLyricsKey ?? Self.clientKey(spicyLyricsKey)
     }
+        earlyScroll = defaults.bool(forKey: Keys.earlyScroll)
+        earlyScrollMs = defaults.double(forKey: Keys.earlyScrollMs)
 
     var hasBundledSpicyKey: Bool { bundledSpicyLyricsKey != nil }
 
@@ -455,6 +462,8 @@ final class AppSettings {
     func resetBackground() {
         dynamicBackground = true
         backgroundDim = Self.defaultBackgroundDim
+        earlyScroll = false
+        earlyScrollMs = 250
         backgroundSpeed = 1
         backgroundBlur = 1
         backgroundSaturation = 1
@@ -584,6 +593,8 @@ enum ArtworkBackground: String, CaseIterable, Identifiable {
         }
     }
 }
+        static let earlyScroll = "earlyScroll"
+        static let earlyScrollMs = "earlyScrollMs"
 
 /// Where the nebula behind the big cover takes its colours from.
 enum NebulaColors: String, CaseIterable, Identifiable {
