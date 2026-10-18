@@ -21,6 +21,8 @@ struct LyricsView: View {
     /// Tapping a line seeks to it. Off while the controls are hidden: the first tap only brings
     /// them back, so reaching the buttons from full-screen lyrics never rewinds the song.
     var tapSeeks = true
+    /// Seconds added to the TV lyric clock to compensate for picture delay.
+    var clockOffset: Double = 0
 
     @State private var animator: LyricsAnimator
     @State private var userScrolling = false
@@ -38,7 +40,7 @@ struct LyricsView: View {
          topInset: CGFloat = 0, bottomInset: CGFloat = 0, horizontalPadding: CGFloat = 24,
          reduced: Bool = false, fontScale: CGFloat = 1,
          onInteraction: @escaping () -> Void = {}, onBackgroundTap: @escaping () -> Void = {},
-         tapSeeks: Bool = true) {
+         tapSeeks: Bool = true, clockOffset: Double = 0) {
         self.lyrics = lyrics
         self.player = player
         self.settings = settings
@@ -50,6 +52,7 @@ struct LyricsView: View {
         self.onInteraction = onInteraction
         self.onBackgroundTap = onBackgroundTap
         self.tapSeeks = tapSeeks
+        self.clockOffset = clockOffset
         _animator = State(initialValue: LyricsAnimator(lyrics: lyrics, simple: settings.simpleLyricsMode))
     }
 
@@ -106,7 +109,7 @@ struct LyricsView: View {
                     TimelineView(.animation(minimumInterval: frameInterval)) { _ in
                         let now = MediaClock.now()
                         let _ = settings.showLyricsFPS ? frameCounter.tick(now) : ()
-                        let _ = animator.step(position: player.position(at: now), now: now,
+                        let _ = animator.step(position: player.position(at: now) + clockOffset, now: now,
                                               blurEnabled: settings.blurInactiveLines && !userScrolling && !reduced,
                                               frameInterval: frameInterval)
                         let focus = animator.focusIndex
@@ -152,7 +155,7 @@ struct LyricsView: View {
                         .onChange(of: player.snapToken) { _, _ in
                             animator.snapNext()
                             let now = MediaClock.now()
-                            animator.step(position: player.position(at: now), now: now,
+                            animator.step(position: player.position(at: now) + clockOffset, now: now,
                                           blurEnabled: settings.blurInactiveLines && !userScrolling && !reduced)
                             guard shown.kind != .static, !userScrolling else { return }
                             proxy.scrollTo(animator.focusIndex, anchor: anchor)

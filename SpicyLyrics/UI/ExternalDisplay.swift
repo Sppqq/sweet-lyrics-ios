@@ -1,29 +1,32 @@
 import AVFoundation
 import SwiftUI
 import UIKit
+import Combine
 
 /// A TV or monitor on AirPlay screen mirroring or a cable. Instead of a copy of the phone, that
 /// screen gets the desktop extension's full-screen view (`Fullscreen.ts`): cover and title on
 /// the left, lyrics on the right, over the flowing background. The phone stays the remote.
 @MainActor
-@Observable
-final class ExternalDisplay {
+final class ExternalDisplay: ObservableObject {
     static let shared = ExternalDisplay()
 
     /// Some screen is showing the lyrics: the phone must not lock (that ends the mirroring).
     var isConnected: Bool { connections > 0 || accessoryShown }
-    private var connections = 0
+    @Published private var connections = 0
     /// iOS 27: the scene accessory's content is on a screen.
-    private var accessoryShown = false
+    @Published private var accessoryShown = false
 
     fileprivate func setAccessoryShown(_ shown: Bool) {
+        let wasConnected = isConnected
         accessoryShown = shown
+        if !wasConnected && isConnected { settings?.tvPhoneLyrics = false }
+        if !isConnected { settings?.tvPhoneLyrics = false }
         SyncLog.log("display", shown ? "external screen: lyrics shown (scene accessory)" : "external screen: lyrics gone (scene accessory)")
     }
 
-    private(set) var settings: AppSettings?
-    private(set) var player: PlayerModel?
-    private(set) var performance: PerformanceMonitor?
+    @Published private(set) var settings: AppSettings?
+    @Published private(set) var player: PlayerModel?
+    @Published private(set) var performance: PerformanceMonitor?
 
     /// Called once at launch, before iOS hands over a screen that is already connected.
     func attach(settings: AppSettings, player: PlayerModel, performance: PerformanceMonitor) {
@@ -32,8 +35,18 @@ final class ExternalDisplay {
         self.performance = performance
     }
 
-    fileprivate func connected() { connections += 1 }
-    fileprivate func disconnected() { connections = max(0, connections - 1) }
+    @Published private(set) var screenPixels: CGSize?
+
+    fileprivate func connected(_ screen: UIScreen) {
+        if !isConnected { settings?.tvPhoneLyrics = false }
+        connections += 1
+        screenPixels = screen.nativeBounds.size
+    }
+    fileprivate func disconnected() {
+        connections = max(0, connections - 1)
+        if connections == 0 { screenPixels = nil }
+        if !isConnected { settings?.tvPhoneLyrics = false }
+    }
 }
 
 /// Only to give the external screen its own scene; the app's window stays SwiftUI's. The same
@@ -112,7 +125,7 @@ final class ExternalDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Not key: the phone's window keeps the keyboard and the menus.
         window.isHidden = false
         self.window = window
-        ExternalDisplay.shared.connected()
+        ExternalDisplay.shared.connected(scene.screen)
         SyncLog.log("display", "external screen \(scene.screen.bounds.size) connected")
     }
 
@@ -149,8 +162,9 @@ struct ExternalDisplayAccessory: ViewModifier {
 }
 
 private struct ExternalDisplayRoot: View {
+    @ObservedObject private var display = ExternalDisplay.shared
+
     var body: some View {
-        let display = ExternalDisplay.shared
         if let settings = display.settings, let player = display.player, let performance = display.performance {
             ExternalLyricsView()
                 .environment(settings)
@@ -175,34 +189,62 @@ struct ExternalLyricsView: View {
         GeometryReader { geometry in
             let layout = DesktopLayout(size: geometry.size)
             ZStack(alignment: .topLeading) {
-                DynamicBackground(
-                    image: settings.dynamicBackground ? player.backgroundArtwork : nil,
-                    imageID: player.artworkID,
-                    animated: settings.dynamicBackground && !reduced,
-                    playing: player.isPlaying,
-                    dim: settings.backgroundDim,
-                    speed: settings.backgroundSpeed,
-                    blur: settings.backgroundBlur,
-                    saturation: settings.backgroundSaturation
-                )
-                .frame(width: geometry.size.width, height: geometry.size.height)
+                background
+                    .frame(width: geometry.size.width, height: geometry.size.height)
 
                 if let lyrics = shownLyrics {
                     lyricsColumn(lyrics, layout: layout)
                         .transition(.opacity)
                 }
 
-                nowBar(layout: layout)
-                    .frame(width: layout.nowBarWidth)
-                    .offset(x: shownLyrics == nil ? layout.centeredX : layout.nowBarX, y: layout.nowBarTop)
+                if showsNowBar {
+                    nowBar(layout: layout)
+                        .frame(width: layout.nowBarWidth)
+                        .offset(x: shownLyrics == nil ? layout.centeredX : layout.nowBarX, y: layout.nowBarTop)
+                        .transition(.opacity)
+                }
             }
             .animation(.easeInOut(duration: 0.6), value: shownLyrics == nil)
+            .animation(.easeInOut(duration: 0.5), value: showsNowBar)
+            .animation(.easeInOut(duration: 0.5), value: settings.tvBackground)
             .animation(.easeInOut(duration: 0.4), value: player.lyricsRevision)
         }
         .ignoresSafeArea()
     }
 
     private var reduced: Bool { settings.powerSaving || performance.constrained }
+
+    /// Cover and title on the left; with nothing to sing they stay, in the middle.
+    private var showsNowBar: Bool { settings.tvShowNowBar || shownLyrics == nil }
+
+    @ViewBuilder
+    private var background: some View {
+        switch TVBackground(rawValue: settings.tvBackground) ?? .cover {
+        case .cover:
+            DynamicBackground(
+                image: settings.dynamicBackground ? player.backgroundArtwork : nil,
+                imageID: player.artworkID,
+                animated: settings.dynamicBackground && !reduced,
+                playing: player.isPlaying,
+                dim: settings.tvBackgroundDim,
+                speed: settings.backgroundSpeed,
+                blur: settings.backgroundBlur,
+                saturation: settings.backgroundSaturation
+            )
+            .transition(.opacity)
+        case .nebula:
+            if CoverVisualizer.isSupported {
+                CoverVisualizerView(player: player, reduced: reduced, dim: settings.tvBackgroundDim * 0.6,
+                                    randomColors: settings.nebulaColors == NebulaColors.random.rawValue,
+                                    maxFrameRate: 30)
+                    .transition(.opacity)
+            } else {
+                Color.black
+            }
+        case .black:
+            Color.black.transition(.opacity)
+        }
+    }
 
     /// Lyrics to show; otherwise the NowBar moves to the middle, like the extension's
     /// `LyricsHidden` page for songs without lyrics.
@@ -220,15 +262,21 @@ struct ExternalLyricsView: View {
         // `--DefaultLyricsSize: clamp(3rem, 7cqw, 4rem)`, relative to the screen's height here so
         // it reads from the sofa; the size setting still scales it.
         let size = clamp(layout.lyricsWidth * 0.07, layout.size.height * 0.045, layout.size.height * 0.062)
+            * CGFloat(clamp(settings.tvLyricsScale, 0.6, 1.6))
+        // Without the cover the lyrics take the middle of the screen.
+        let x = settings.tvShowNowBar ? layout.lyricsX : layout.size.width * 0.14
+        let width = settings.tvShowNowBar ? layout.lyricsWidth : layout.size.width * 0.72
         return LyricsView(
             lyrics: lyrics, player: player, settings: settings,
             horizontalPadding: padding, reduced: reduced,
             fontScale: size / CGFloat(AppSettings.defaultFontSize),
-            tapSeeks: false
+            tapSeeks: false,
+            clockOffset: settings.tvOffsetMs / 1000
         )
         .id(player.lyricsRevision)
-        .frame(width: layout.lyricsWidth + padding * 2, height: layout.size.height)
-        .offset(x: layout.lyricsX - padding)
+        .frame(width: width + padding * 2, height: layout.size.height)
+        .offset(x: x - padding)
+        .animation(.easeInOut(duration: 0.5), value: settings.tvShowNowBar)
         .opacity(player.isResyncing ? 0.3 : 1)
         .animation(.easeInOut(duration: 0.25), value: player.isResyncing)
         .allowsHitTesting(false)
@@ -253,7 +301,7 @@ struct ExternalLyricsView: View {
             .frame(height: height * 0.1)
             .padding(.top, height * 0.012)
 
-            if let duration = player.track?.duration, duration > 0 {
+            if settings.tvShowTimeline, let duration = player.track?.duration, duration > 0 {
                 Timeline(duration: duration, height: height)
                     .padding(.top, height * 0.006)
                     .padding(.horizontal, layout.nowBarWidth * 0.01)

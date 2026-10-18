@@ -4,6 +4,7 @@ import SwiftUI
 /// full-height lyrics and fade away while a song plays. Landscape puts artwork and controls on
 /// the left, lyrics on the right.
 struct NowPlayingView: View {
+    @ObservedObject private var externalDisplay = ExternalDisplay.shared
     @Environment(PlayerModel.self) private var player
     @Environment(AppSettings.self) private var settings
     @EnvironmentObject private var auth: SpotifyAuth
@@ -62,7 +63,7 @@ struct NowPlayingView: View {
                 DynamicBackground(
                     image: settings.dynamicBackground ? player.backgroundArtwork : nil,
                     imageID: player.artworkID,
-                    animated: settings.dynamicBackground && !reduced,
+                    animated: settings.dynamicBackground && !reduced && !tvMode,
                     playing: player.isPlaying,
                     dim: settings.backgroundDim,
                     speed: settings.backgroundSpeed,
@@ -149,6 +150,9 @@ struct NowPlayingView: View {
         .animation(.easeInOut(duration: 0.3), value: player.autoSkipNotice)
         .onChange(of: lyricsOnly) { _, value in
             if value { hideChrome() }
+        }
+        .onChange(of: tvMode, initial: true) { _, value in
+            if value { showChrome() }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
@@ -318,9 +322,12 @@ struct NowPlayingView: View {
         }
     }
 
+    /// A TV shows the lyrics: the phone shows the TV's settings in their place.
+    private var tvMode: Bool { externalDisplay.isConnected && !settings.tvPhoneLyrics }
+
     /// The experimental visualizer fills in for lyrics hidden by the user's choice.
     private var showVisualizer: Bool {
-        CoverVisualizer.isSupported
+        CoverVisualizer.isSupported && !tvMode
             && ((bigArtworkShown && settings.artworkBackground == ArtworkBackground.nebula.rawValue)
                 || (lyricsHidden && settings.hiddenLyricsView == HiddenLyricsView.visualizer.rawValue))
     }
@@ -328,7 +335,7 @@ struct NowPlayingView: View {
     /// The big cover instead of the lyrics: chosen with the bottom-left button, or the setting
     /// for songs whose lyrics are hidden.
     private var bigArtworkShown: Bool {
-        artworkMode || (lyricsHidden && settings.hiddenLyricsView == HiddenLyricsView.artwork.rawValue)
+        !tvMode && (artworkMode || (lyricsHidden && settings.hiddenLyricsView == HiddenLyricsView.artwork.rawValue)
     }
 
     /// Synced lyrics for the line under the big cover.
@@ -342,7 +349,7 @@ struct NowPlayingView: View {
     private var backgroundOnly: Bool { isLandscape && lyricsHidden }
 
     private var canAutoHide: Bool {
-        guard chromeVisible, !showSettings, !showPicker, !showSetupGuide, !showOwnLyrics else { return false }
+        guard chromeVisible, !tvMode, !showSettings, !showPicker, !showSetupGuide, !showOwnLyrics else { return false }
         return lyricsOnly || backgroundOnly || (settings.autoHideControls && player.isPlaying && lyricsLoaded)
     }
 
@@ -720,8 +727,43 @@ struct NowPlayingView: View {
 
     // MARK: Lyrics
 
-    @ViewBuilder
+    /// The lyrics (or what stands in for them), or the TV's settings while a TV shows them.
     private func lyricsArea(topInset: CGFloat, bottomInset: CGFloat, horizontalPadding: CGFloat) -> some View {
+        ZStack {
+            if tvMode {
+                TVControlPanel(topInset: topInset, bottomInset: bottomInset) {
+                    withAnimation(.spring(response: 0.7, dampingFraction: 0.88)) { settings.tvPhoneLyrics = true }
+                }
+                .transition(.blurFade)
+            } else {
+                phoneLyricsArea(topInset: topInset, bottomInset: bottomInset, horizontalPadding: horizontalPadding)
+                    .transition(.blurFade)
+            }
+        }
+        .animation(.spring(response: 0.7, dampingFraction: 0.88), value: tvMode)
+        .overlay(alignment: .bottom) {
+            // The lyrics are on the phone by choice: one tap back to the TV's settings.
+            if externalDisplay.isConnected && settings.tvPhoneLyrics && chromeVisible {
+                Button {
+                    withAnimation(.spring(response: 0.7, dampingFraction: 0.88)) { settings.tvPhoneLyrics = false }
+                } label: {
+                    Label(String(localized: "Настройки телевизора"), systemImage: "airplay.video")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .environment(\.colorScheme, .dark)
+                }
+                .buttonStyle(SquishButtonStyle())
+                .padding(.bottom, bottomInset + 12)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func phoneLyricsArea(topInset: CGFloat, bottomInset: CGFloat, horizontalPadding: CGFloat) -> some View {
         if bigArtworkShown || lyricsHidden {
             ZStack {
                 Color.clear

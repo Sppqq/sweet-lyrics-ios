@@ -54,6 +54,7 @@ struct SpicyLyricsApp: App {
 }
 
 struct RootView: View {
+    @ObservedObject private var externalDisplay = ExternalDisplay.shared
     /// Follows whichever player is playing when the player choice is "Auto".
     let sourceSwitcher: AutoSourceSwitcher
     @EnvironmentObject private var auth: SpotifyAuth
@@ -111,7 +112,7 @@ struct RootView: View {
         .onChange(of: settings.playerChoice) { _, _ in updateActivity(scenePhase) }
         .onChange(of: settings.appleMusicOnboarded) { _, _ in updateActivity(scenePhase) }
         .onChange(of: settings.keepScreenOn) { _, _ in updateActivity(scenePhase) }
-        .onChange(of: ExternalDisplay.shared.isConnected) { _, _ in updateActivity(scenePhase) }
+        .onChange(of: externalDisplay.isConnected) { _, _ in updateActivity(scenePhase) }
         .onChange(of: pip.keepsAppRunning) { _, _ in updateActivity(scenePhase) }
         .onChange(of: settings.useAppRemote) { _, _ in appRemote.refresh() }
         .onChange(of: settings.syncLogEnabled) { _, enabled in SyncLog.shared.enabled = enabled }
@@ -244,7 +245,7 @@ struct RootView: View {
     private func updateActivity(_ phase: ScenePhase) {
         // A locked phone stops screen mirroring: keep it awake while the TV shows the lyrics.
         UIApplication.shared.isIdleTimerDisabled = phase == .active && sourceReady
-            && (settings.keepScreenOn || ExternalDisplay.shared.isConnected)
+            && (settings.keepScreenOn || externalDisplay.isConnected)
         if wantsToFollow(phase) {
             stopTask?.cancel()
             stopTask = nil

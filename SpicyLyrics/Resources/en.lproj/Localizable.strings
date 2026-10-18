@@ -519,3 +519,19 @@
 "Скрыть" = "Hide";
 "«Звезда на GitHub» в настройках" = "“Star on GitHub” in Settings";
 "Строка внизу главной страницы настроек. Её можно скрыть и свайпом влево." = "The row at the bottom of the main Settings page. You can also hide it by swiping left.";
+
+/* Lyrics on a TV: its settings on the phone */
+"Отмена" = "Cancel";
+"Чёрный" = "Black";
+"Сдвиг текста" = "Lyrics Offset";
+"Обложка и название" = "Artwork and Title";
+"Полоса времени" = "Timeline";
+"Текст на телефоне" = "Lyrics on Phone";
+"Сбросить" = "Reset";
+"Текст на телевизоре" = "Lyrics on the TV";
+"Телефон теперь пульт" = "Your phone is the remote now";
+"0 мс" = "0 ms";
+"мс" = "ms";
+"Настройки телевизора" = "TV Settings";
+"Если текст на телевизоре отстаёт от музыки, сдвиньте вправо; если спешит — влево." = "If the lyrics on the TV lag behind the music, move it right; if they run early, move it left.";
+"Всё сохраняется и применится, когда телевизор подключится в следующий раз." = "Everything is saved and applies the next time the TV connects.";
