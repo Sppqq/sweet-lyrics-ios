@@ -113,6 +113,17 @@ private enum TranslationJob {
         pairs.filter { source, translation in
             !translation.trimmingCharacters(in: .whitespaces).isEmpty && normalized(translation) != normalized(source)
         }
+        .mapValues(withoutFinalPeriod)
+    }
+
+    /// Lyric lines don't end in a full stop, but translators add one: "Я иду домой." loses it,
+    /// an ellipsis ("...", "…") stays.
+    private static func withoutFinalPeriod(_ text: String) -> String {
+        var text = text.trimmingCharacters(in: .whitespaces)
+        guard let last = text.last, last == "." || last == "。" else { return text }
+        if text.hasSuffix("..") { return text }
+        text.removeLast()
+        return text.trimmingCharacters(in: .whitespaces)
     }
 }
 
