@@ -27,8 +27,8 @@ the popular Spicetify extension for Spotify on desktop. Made by
 <p align="center"><sub>Turn your phone sideways</sub></p>
 
 <p align="center">
-  <img src="docs/media/ipad.webp" width="300" alt="iPad: the player next to the lyrics">
-  <img src="docs/media/tv.webp" width="560" alt="Full-screen lyrics on a TV over Screen Mirroring">
+  <img src="docs/media/ipad.webp" height="302" alt="iPad: the player next to the lyrics">
+  <img src="docs/media/tv.webp" height="302" alt="Full-screen lyrics on a TV over Screen Mirroring">
 </p>
 <p align="center"><sub>iPad · lyrics on your TV, with your phone as the remote</sub></p>
 
