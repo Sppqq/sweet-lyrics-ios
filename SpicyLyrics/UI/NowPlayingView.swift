@@ -335,7 +335,7 @@ struct NowPlayingView: View {
     /// The big cover instead of the lyrics: chosen with the bottom-left button, or the setting
     /// for songs whose lyrics are hidden.
     private var bigArtworkShown: Bool {
-        !tvMode && (artworkMode || (lyricsHidden && settings.hiddenLyricsView == HiddenLyricsView.artwork.rawValue)
+        !tvMode && (artworkMode || (lyricsHidden && settings.hiddenLyricsView == HiddenLyricsView.artwork.rawValue))
     }
 
     /// Synced lyrics for the line under the big cover.
