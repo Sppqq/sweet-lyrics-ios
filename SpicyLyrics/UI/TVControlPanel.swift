@@ -62,7 +62,7 @@ struct TVControlPanel: View {
 
                 HStack(spacing: 10) {
                     Button(action: onShowLyrics) {
-                        Label(String(localized: "Текст на телефоне"), systemImage: "iphone")
+                        Label(String(localized: "На телефон"), systemImage: "iphone")
                             .frame(maxWidth: .infinity)
                     }
                     Button {
@@ -73,6 +73,8 @@ struct TVControlPanel: View {
                     }
                 }
                 .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .buttonStyle(PanelButtonStyle())
                 .staged(4, appeared)
 
