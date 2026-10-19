@@ -290,6 +290,15 @@ private struct TextLookSettings: View {
                 Text(String(localized: "Где держится строка, которую поют, и как быстро текст доезжает до следующей."))
             }
 
+            Section {
+                Toggle(String(localized: "Новый вид титров"), isOn: $settings.refinedCredits)
+                Toggle(String(localized: "Титры за последним исполнителем"), isOn: $settings.creditsFollowLastLine)
+            } header: {
+                Text(String(localized: "Титры"))
+            } footer: {
+                Text(String(localized: "Авторы и источник текста под последней строкой: тихим шрифтом, без рамки, приглушены, пока последняя строка не спета. Если песня кончается дуэтной строкой справа, титры могут встать под неё."))
+            }
+
             ResetSection(title: String(localized: "Вернуть как было")) { settings.resetLyricsLook() }
         }
     }

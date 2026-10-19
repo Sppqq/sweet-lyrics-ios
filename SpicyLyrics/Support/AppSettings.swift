@@ -173,6 +173,10 @@ final class AppSettings {
     /// Start scrolling to the next line a bit before it is sung.
     var earlyScroll: Bool { didSet { defaults.set(earlyScroll, forKey: Keys.earlyScroll) } }
     var earlyScrollMs: Double { didSet { defaults.set(earlyScrollMs, forKey: Keys.earlyScrollMs) } }
+    /// Spicy Lyrics' "Refined Credits": quiet type under the last line instead of the old credit lines.
+    var refinedCredits: Bool { didSet { defaults.set(refinedCredits, forKey: Keys.refinedCredits) } }
+    /// A song ending on a duet line sung from the right keeps its credits on that side.
+    var creditsFollowLastLine: Bool { didSet { defaults.set(creditsFollowLastLine, forKey: Keys.creditsFollowLastLine) } }
     /// × the brightness of the translation under a line.
     var translationBrightness: Double { didSet { defaults.set(translationBrightness, forKey: Keys.translationBrightness) } }
     /// × the saturation of the cover behind the lyrics (app and PiP).
@@ -268,6 +272,8 @@ final class AppSettings {
             Keys.scrollSpeed: 1.0,
             Keys.earlyScroll: false,
             Keys.earlyScrollMs: 250.0,
+            Keys.refinedCredits: true,
+            Keys.creditsFollowLastLine: false,
             Keys.translationBrightness: 1.0,
             Keys.backgroundSaturation: 1.0,
             Keys.lyricsFrameRate: 60.0,
@@ -344,6 +350,8 @@ final class AppSettings {
         scrollSpeed = defaults.double(forKey: Keys.scrollSpeed)
         earlyScroll = defaults.bool(forKey: Keys.earlyScroll)
         earlyScrollMs = defaults.double(forKey: Keys.earlyScrollMs)
+        refinedCredits = defaults.bool(forKey: Keys.refinedCredits)
+        creditsFollowLastLine = defaults.bool(forKey: Keys.creditsFollowLastLine)
         translationBrightness = defaults.double(forKey: Keys.translationBrightness)
         backgroundSaturation = defaults.double(forKey: Keys.backgroundSaturation)
         lyricsFrameRate = defaults.double(forKey: Keys.lyricsFrameRate)
@@ -431,6 +439,8 @@ final class AppSettings {
         scrollSpeed = 1
         earlyScroll = false
         earlyScrollMs = 250
+        refinedCredits = true
+        creditsFollowLastLine = false
     }
 
     /// The translation's own look (its page in settings).
@@ -544,6 +554,8 @@ final class AppSettings {
         static let scrollSpeed = "scrollSpeed"
         static let earlyScroll = "earlyScroll"
         static let earlyScrollMs = "earlyScrollMs"
+        static let refinedCredits = "refinedCredits"
+        static let creditsFollowLastLine = "creditsFollowLastLine"
         static let translationBrightness = "translationBrightness"
         static let backgroundSaturation = "backgroundSaturation"
         static let lyricsFrameRate = "lyricsFrameRate"

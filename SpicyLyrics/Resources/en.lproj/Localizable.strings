@@ -515,3 +515,7 @@
 "Скрыть" = "Hide";
 "«Звезда на GitHub» в настройках" = "“Star on GitHub” in Settings";
 "Строка внизу главной страницы настроек. Её можно скрыть и свайпом влево." = "The row at the bottom of the main Settings page. You can also hide it by swiping left.";
+"Новый вид титров" = "Refined Credits";
+"Титры за последним исполнителем" = "Credits Follow the Last Singer";
+"Титры" = "Credits";
+"Авторы и источник текста под последней строкой: тихим шрифтом, без рамки, приглушены, пока последняя строка не спета. Если песня кончается дуэтной строкой справа, титры могут встать под неё." = "Songwriters and the lyrics source sit close under the last line in quiet type, dimmed until the last line has been sung. A song that ends on a duet line sung from the right can keep its credits on that side.";

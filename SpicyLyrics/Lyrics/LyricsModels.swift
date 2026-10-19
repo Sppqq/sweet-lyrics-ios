@@ -55,6 +55,9 @@ struct LyricsCredits: Codable, Hashable {
     var isCommunity: Bool?
     var maker: LyricsContributor?
     var uploader: LyricsContributor?
+    /// Where the provider got them, e.g. "lrc.red" (the extension's `source_via`).
+    var via: String?
+    var viaURL: URL?
 }
 
 struct LyricsDocument: Codable, Hashable {

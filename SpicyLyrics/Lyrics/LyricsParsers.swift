@@ -115,13 +115,21 @@ enum SpicyLyricsParser {
         let source = (rawSource ?? "").lowercased()
         let isCommunity = source.contains("spl") || source.contains("community")
             || ((maker != nil || uploader != nil) && !source.contains("aml") && !source.contains("spt"))
+        let via = JSONLoose.string(body["source_via"]).flatMap { viaMap[$0] }
         return LyricsCredits(
             providedBy: providerLabel(rawSource),
             isCommunity: isCommunity,
             maker: maker,
-            uploader: uploader
+            uploader: uploader,
+            via: via?.label,
+            viaURL: via?.url
         )
     }
+
+    /// Spicy Lyrics' `ViaMap`: the utm_source lets the source tell visits that came from here.
+    private static let viaMap: [String: (label: String, url: URL?)] = [
+        "lrc-red": ("lrc.red", URL(string: "https://lrc.red/?utm_source=spicylyrics")),
+    ]
 
     /// Spicy Lyrics' `ProviderMap`.
     private static func providerLabel(_ raw: String?) -> String {
@@ -130,6 +138,7 @@ enum SpicyLyricsParser {
         if source.contains("aml") || source.contains("apple") { return "Apple Music" }
         if source.contains("spl") || source.contains("spicy") || source.contains("community") { return "Spicy Lyrics" }
         if source.contains("ldb") { return "Local DB" }
+        if source.contains("uns") { return "Unison" }
         return "Spicy Lyrics"
     }
 

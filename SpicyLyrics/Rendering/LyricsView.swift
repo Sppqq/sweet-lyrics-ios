@@ -126,8 +126,11 @@ struct LyricsView: View {
                                     .id(line.id)
                             }
                             // Spicy Lyrics always credits the writers and whoever synced the lyrics.
-                            LyricsCreditsView(lyrics: shown, lyricSize: typography.fontSize)
-                                .padding(.top, typography.fontSize * 0.45)
+                            LyricsCreditsView(lyrics: shown, lyricSize: typography.fontSize,
+                                              refined: settings.refinedCredits,
+                                              followLastLine: settings.creditsFollowLastLine && !settings.centerLyrics,
+                                              allSung: shown.kind == .static
+                                                  || player.position(at: now) >= (shown.lines.last?.end ?? 0))
                         }
                         .padding(.horizontal, horizontalPadding)
                         .padding(.vertical, geometry.size.height * 0.6)
@@ -491,20 +494,42 @@ private struct EdgeFade: View {
 private struct LyricsCreditsView: View {
     let lyrics: PreparedLyrics
     let lyricSize: CGFloat
+    /// The extension's "Refined Credits" experiment (on by default since 6.4).
+    var refined = true
+    /// "Credits Follow the Last Singer": a song ending on a duet line sung from the right.
+    var followLastLine = false
+    /// The refined credits stay dim, like a line still to come, until the last line is sung.
+    var allSung = true
 
     private var credits: LyricsCredits { lyrics.credits }
     /// A little larger than on desktop, for a phone screen (as the Android port does).
     private var small: CGFloat { max(12, lyricSize * 0.34 * 1.2) }
+    private var trailing: Bool {
+        followLastLine && (lyrics.lines.last { !$0.isInterlude && !$0.isBackground }?.oppositeAligned ?? false)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: lyricSize * 0.25) {
+        if refined {
+            let size = max(14, lyricSize * 0.34 * 1.2)
+            RefinedCreditsView(lyrics: lyrics, size: size, trailing: trailing)
+                .opacity(allSung ? 1 : 0.55)
+                .animation(.easeOut(duration: 0.4), value: allSung)
+                // Closer to the last line than the old lines: the song's footnote.
+                .padding(.top, size * 0.75)
+        } else {
+            legacy.padding(.top, lyricSize * 0.45)
+        }
+    }
+
+    private var legacy: some View {
+        VStack(alignment: trailing ? .trailing : .leading, spacing: lyricSize * 0.25) {
             if !lyrics.songwriters.isEmpty {
                 Text("Written by: " + lyrics.songwriters.joined(separator: ", "))
                     .font(.system(size: max(14, lyricSize * 0.47), weight: .semibold))
                     .foregroundStyle(.white.opacity(0.7))
             }
             if let provider = credits.providedBy {
-                Text("Provided by: " + provider)
+                Text("Provided by: " + provider + (credits.via.map { " Via " + $0 } ?? ""))
                     .font(.system(size: small, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.55))
             }
@@ -524,7 +549,112 @@ private struct LyricsCreditsView: View {
                 )
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(trailing ? .trailing : .leading)
+        .frame(maxWidth: .infinity, alignment: trailing ? .trailing : .leading)
+    }
+}
+
+/// Spicy Lyrics' refined credits (Mixed.css, `.Exp_RefinedCredits .SongCredits`): no box, the
+/// songwriters, then the source on a smaller second line, or for community lyrics "Community
+/// lyrics · Made by @maker · Uploaded by @uploader". Labels at 55% of white, names at 70%.
+private struct RefinedCreditsView: View {
+    let lyrics: PreparedLyrics
+    let size: CGFloat
+    let trailing: Bool
+    @Environment(\.openURL) private var openURL
+
+    private static let text = Color.white.opacity(0.7)
+    private static let muted = Color.white.opacity(0.55)
+
+    private var credits: LyricsCredits { lyrics.credits }
+    private var secondary: CGFloat { max(size * 0.86, 12) }
+    private var alignment: HorizontalAlignment { trailing ? .trailing : .leading }
+    /// Community lyrics name their source in the community line, so "Provided by" goes.
+    private var community: Bool {
+        credits.isCommunity == true && (credits.maker != nil || credits.uploader != nil)
+    }
+
+    var body: some View {
+        VStack(alignment: alignment, spacing: size * 0.3) {
+            if !lyrics.songwriters.isEmpty {
+                (Text("Written by ").foregroundColor(Self.muted)
+                    + Text(lyrics.songwriters.joined(separator: ", ")).foregroundColor(Self.text))
+                    .font(.system(size: size, weight: .semibold))
+            }
+            if community {
+                communityLine
+            } else if let provider = credits.providedBy {
+                Text(providerLine(provider))
+                    .font(.system(size: secondary, weight: .medium))
+            }
+        }
+        .lineSpacing(size * 0.1)
+        .multilineTextAlignment(trailing ? .trailing : .leading)
+        // A footnote's measure, so a long list of songwriters doesn't run the full lyrics width.
+        .frame(maxWidth: size * 46, alignment: Alignment(horizontal: alignment, vertical: .center))
+        .frame(maxWidth: .infinity, alignment: Alignment(horizontal: alignment, vertical: .center))
+    }
+
+    /// "Provided by Apple Music via lrc.red", only the source's link underlined.
+    private func providerLine(_ provider: String) -> AttributedString {
+        var line = AttributedString("Provided by " + provider)
+        line.swiftUI.foregroundColor = Self.muted
+        if let via = credits.via {
+            var label = AttributedString(" via ")
+            label.swiftUI.foregroundColor = Self.muted
+            var link = AttributedString(via)
+            link.swiftUI.foregroundColor = Self.text
+            if let url = credits.viaURL {
+                link.link = url
+                link.swiftUI.underlineStyle = Text.LineStyle(pattern: .solid, color: .white.opacity(0.7 * 0.35))
+            }
+            line += label + link
+        }
+        return line
+    }
+
+    /// Each person stays whole on one line; the dot before them separates, outside the link.
+    private var communityLine: some View {
+        FlowLayout(alignment: alignment, spacing: 0, rowSpacing: size * 0.3) {
+            Text("Community lyrics").foregroundColor(Self.muted)
+            if let maker = credits.maker {
+                person("Made by", maker)
+            }
+            if let uploader = credits.uploader {
+                person(credits.maker != nil ? "Uploaded by" : "Made by", uploader)
+            }
+        }
+        .font(.system(size: secondary, weight: .medium))
+    }
+
+    /// The dot, the role, the avatar, then the name; only the name reads as a link.
+    private func person(_ role: String, _ contributor: LyricsContributor) -> some View {
+        HStack(spacing: secondary * 0.3) {
+            Text("\u{00B7}").foregroundColor(Self.muted)
+                .padding(.horizontal, secondary * 0.15)
+            Text(role).foregroundColor(Self.muted)
+            if let avatar = contributor.avatarURL {
+                AsyncImage(url: avatar) { image in
+                    image.resizable().scaledToFill()
+                } placeholder: {
+                    Color.white.opacity(0.1)
+                }
+                .frame(width: secondary * 1.15, height: secondary * 1.15)
+                .clipShape(Circle())
+                .opacity(0.85)
+            }
+            Text("@" + contributor.name)
+                .fontWeight(.semibold)
+                .foregroundColor(Self.text)
+                .underline(color: .white.opacity(0.7 * 0.35))
+        }
+        .fixedSize()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if let url = contributor.profileURL { openURL(url) }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(contributor.profileURL != nil ? .isLink : [])
     }
 }
 
