@@ -173,6 +173,9 @@ final class AppSettings {
     /// Start scrolling to the next line a bit before it is sung.
     var earlyScroll: Bool { didSet { defaults.set(earlyScroll, forKey: Keys.earlyScroll) } }
     var earlyScrollMs: Double { didSet { defaults.set(earlyScrollMs, forKey: Keys.earlyScrollMs) } }
+    /// A tap on a line lands 300 ms before it, so the player's fade-in after a seek
+    /// doesn't swallow the first word (the extension's Seek Fade-in Compensation).
+    var seekFadeCompensation: Bool { didSet { defaults.set(seekFadeCompensation, forKey: Keys.seekFadeCompensation) } }
     /// Spicy Lyrics' "Refined Credits": quiet type under the last line instead of the old credit lines.
     var refinedCredits: Bool { didSet { defaults.set(refinedCredits, forKey: Keys.refinedCredits) } }
     /// A song ending on a duet line sung from the right keeps its credits on that side.
@@ -273,6 +276,7 @@ final class AppSettings {
             Keys.earlyScroll: false,
             Keys.earlyScrollMs: 250.0,
             Keys.refinedCredits: true,
+            Keys.seekFadeCompensation: true,
             Keys.creditsFollowLastLine: false,
             Keys.translationBrightness: 1.0,
             Keys.backgroundSaturation: 1.0,
@@ -351,6 +355,7 @@ final class AppSettings {
         earlyScroll = defaults.bool(forKey: Keys.earlyScroll)
         earlyScrollMs = defaults.double(forKey: Keys.earlyScrollMs)
         refinedCredits = defaults.bool(forKey: Keys.refinedCredits)
+        seekFadeCompensation = defaults.bool(forKey: Keys.seekFadeCompensation)
         creditsFollowLastLine = defaults.bool(forKey: Keys.creditsFollowLastLine)
         translationBrightness = defaults.double(forKey: Keys.translationBrightness)
         backgroundSaturation = defaults.double(forKey: Keys.backgroundSaturation)
@@ -440,6 +445,7 @@ final class AppSettings {
         earlyScroll = false
         earlyScrollMs = 250
         refinedCredits = true
+        seekFadeCompensation = true
         creditsFollowLastLine = false
     }
 
@@ -555,6 +561,7 @@ final class AppSettings {
         static let earlyScroll = "earlyScroll"
         static let earlyScrollMs = "earlyScrollMs"
         static let refinedCredits = "refinedCredits"
+        static let seekFadeCompensation = "seekFadeCompensation"
         static let creditsFollowLastLine = "creditsFollowLastLine"
         static let translationBrightness = "translationBrightness"
         static let backgroundSaturation = "backgroundSaturation"

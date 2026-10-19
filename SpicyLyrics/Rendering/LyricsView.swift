@@ -302,8 +302,13 @@ extension LyricsView {
 
     /// Where to seek so `line` lights up right away: its start, less the user's offset, plus the
     /// headphone delay the clock subtracts (else the line before stayed lit ~200 ms on AirPods).
+    /// The player fades audio in for about this long after a seek, so landing exactly on a
+    /// line's start swallows its first syllable on faster songs (Spicy Lyrics' `SeekToLineStart`).
+    private static let seekFadeCompensation: Double = 0.3
+
     private func seekTarget(_ line: PreparedLine) -> Double {
-        max(0, line.start - settings.timingOffsetMs / 1000 + player.appliedOutputLatency)
+        let lead = settings.seekFadeCompensation ? Self.seekFadeCompensation : 0
+        return max(0, line.start - lead - settings.timingOffsetMs / 1000 + player.appliedOutputLatency)
     }
 
     /// Long press on a line.

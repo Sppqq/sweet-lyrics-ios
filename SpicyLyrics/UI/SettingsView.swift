@@ -284,10 +284,11 @@ private struct TextLookSettings: View {
                     SliderRow(title: String(localized: "Время раннего пролистывания"), value: $settings.earlyScrollMs,
                               range: 0...1000, step: 50, format: { "\(Int($0)) ms" })
                 }
+                Toggle(String(localized: "Перемотка чуть раньше строки"), isOn: $settings.seekFadeCompensation)
             } header: {
                 Text(String(localized: "Прокрутка"))
             } footer: {
-                Text(String(localized: "Где держится строка, которую поют, и как быстро текст доезжает до следующей."))
+                Text(String(localized: "Где держится строка, которую поют, и как быстро текст доезжает до следующей. Тап по строке может перематывать на 300 мс раньше, чтобы плавное нарастание звука после перемотки не съедало первое слово: полезно для рэпа и быстрых песен."))
             }
 
             Section {

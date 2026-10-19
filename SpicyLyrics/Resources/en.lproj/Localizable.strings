@@ -305,7 +305,8 @@
 "Прокрутка" = "Scrolling";
 "Раннее пролистывание" = "Early Scroll";
 "Время раннего пролистывания" = "Early Scroll Time";
-"Где держится строка, которую поют, и как быстро текст доезжает до следующей." = "Where the line being sung stays, and how fast the lyrics glide to the next one.";
+"Где держится строка, которую поют, и как быстро текст доезжает до следующей. Тап по строке может перематывать на 300 мс раньше, чтобы плавное нарастание звука после перемотки не съедало первое слово: полезно для рэпа и быстрых песен." = "Where the line being sung stays, and how fast the lyrics glide to the next one. Tapping a line can seek 300 ms before it, so the fade-in after a seek doesn't clip the first word: best for rap and fast songs.";
+"Перемотка чуть раньше строки" = "Seek Fade-in Compensation";
 "Выше на %lld%%" = "%lld%% higher";
 "Ниже на %lld%%" = "%lld%% lower";
 "Яркость перевода" = "Translation Brightness";
