@@ -13,8 +13,8 @@ final class PlayerModel {
         case loading
         case loaded(PreparedLyrics)
         case notFound
-        case unavailable(String)
-        case failed(String)
+        case unavailable(LyricsNotice)
+        case failed(LyricsFailure)
     }
 
     private(set) var content: PlaybackSnapshot.Content?
@@ -1294,7 +1294,7 @@ final class PlayerModel {
                 switch await self.lyrics.lyrics(for: info) {
                 case .found(let document): self.lookahead[info.id] = KnownLyrics(document)
                 case .notFound: self.lookahead[info.id] = KnownLyrics(nil)
-                case .failed: break
+                case .failed, .cancelled: break
                 }
             }
             if self.lookahead.count > 300 { self.lookahead.removeAll() }
@@ -1336,11 +1336,11 @@ final class PlayerModel {
             loadLyrics(force: false)
             lookAhead()
         case .episode:
-            lyricsState = .unavailable(String(localized: "Для подкастов тексты недоступны"))
+            lyricsState = .unavailable(.episode)
         case .ad:
-            lyricsState = .unavailable(String(localized: "Реклама"))
+            lyricsState = .unavailable(.ad)
         case .unknown:
-            lyricsState = .unavailable(String(localized: "Не удалось распознать трек"))
+            lyricsState = .unavailable(.unknownTrack)
         case .none:
             lyricsState = .idle
         }
@@ -1370,11 +1370,11 @@ final class PlayerModel {
                 SyncLog.shared.add("lyrics", "not found")
                 self.lyricsState = .notFound
                 self.checkAutoSkip()
-            case .failed(let reason):
-                if reason != "cancelled" {
-                    SyncLog.shared.add("lyrics", "failed: \(reason)")
-                    self.lyricsState = .failed(reason)
-                }
+            case .failed(let failure):
+                SyncLog.shared.add("lyrics", "failed: \(failure.detail)")
+                self.lyricsState = .failed(failure)
+            case .cancelled:
+                break
             }
         }
     }

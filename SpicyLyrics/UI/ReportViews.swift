@@ -240,6 +240,11 @@ struct ReportComposeView: View {
         let jpeg: Data
     }
 
+    /// `prefill` starts the message, e.g. with a lyrics notice's details.
+    init(prefill: String = "") {
+        _message = State(initialValue: prefill)
+    }
+
     private var canSend: Bool {
         !sending && (!message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !photos.isEmpty || includeLog)
     }

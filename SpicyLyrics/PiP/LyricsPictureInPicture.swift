@@ -509,8 +509,10 @@ struct PiPSnapshot: @unchecked Sendable {
             message = String(localized: "Загрузка текста…")
         case .notFound:
             showWithoutLyrics(player, settings)
-        case .failed, .unavailable:
-            message = String(localized: "Текст недоступен")
+        case .failed(let failure):
+            message = failure.notice.title
+        case .unavailable(let notice):
+            message = notice.title
         case .idle:
             message = player.statusMessage ?? (player.supportsSpotifyFeatures ? String(localized: "Включите музыку в Spotify") : String(localized: "Включите музыку в Apple Music"))
         }

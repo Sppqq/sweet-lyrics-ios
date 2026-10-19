@@ -304,6 +304,8 @@ struct NowPlayingView: View {
     private var lyricsHidden: Bool {
         switch player.lyricsState {
         case .notFound: return settings.hideNotFoundNotice
+        // Podcasts and ads only say there's nothing to show, like "not found"; errors keep their notice.
+        case .unavailable(let notice): return settings.hideNotFoundNotice && notice.isNoLyrics
         case .loaded(let lyrics): return settings.hideStaticLyrics && lyrics.kind == .static
         default: return false
         }
@@ -839,15 +841,12 @@ struct NowPlayingView: View {
                 .padding(.top, topInset)
                 .frame(maxHeight: .infinity, alignment: .top)
         case .notFound:
-            message(icon: "text.badge.xmark", title: String(localized: "Текст не найден"),
-                    detail: settings.useLRCLibFallback || !player.supportsSpotifyFeatures
-                        ? String(localized: "Для этого трека пока нет текста ни в Spicy Lyrics, ни в LRCLIB.")
-                        : String(localized: "Для этого трека пока нет текста в Spicy Lyrics."),
-                    retry: true)
-        case .failed(let reason):
-            message(icon: "wifi.exclamationmark", title: String(localized: "Не удалось загрузить текст"), detail: reason, retry: true)
-        case .unavailable(let reason):
-            message(icon: "music.note", title: reason, detail: nil, retry: false)
+            LyricsNoticeView(notice: player.track?.isLocal == true ? .localTrack : .notFound,
+                             onOwnLyrics: { showOwnLyrics = true })
+        case .failed(let failure):
+            LyricsNoticeView(notice: failure.notice, failure: failure)
+        case .unavailable(let notice):
+            LyricsNoticeView(notice: notice)
         case .idle:
             idleState
         }
@@ -881,29 +880,6 @@ struct NowPlayingView: View {
                         .padding(.vertical, 10)
                         .background(.white.opacity(0.15), in: Capsule())
                 }
-            }
-        }
-        .foregroundStyle(.white)
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private func message(icon: String, title: String, detail: String?, retry: Bool) -> some View {
-        VStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 40))
-            Text(title)
-                .font(.title3.weight(.semibold))
-                .multilineTextAlignment(.center)
-            if let detail {
-                Text(detail)
-                    .font(.callout)
-                    .foregroundStyle(.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-            }
-            if retry {
-                Button(String(localized: "Повторить")) { player.loadLyrics(force: true) }
-                    .buttonStyle(.bordered)
             }
         }
         .foregroundStyle(.white)
