@@ -170,6 +170,9 @@ final class AppSettings {
     var activeLinePosition: Double { didSet { defaults.set(activeLinePosition, forKey: Keys.activeLinePosition) } }
     /// × the speed of the glide to the next line.
     var scrollSpeed: Double { didSet { defaults.set(scrollSpeed, forKey: Keys.scrollSpeed) } }
+    /// Start scrolling to the next line a bit before it is sung.
+    var earlyScroll: Bool { didSet { defaults.set(earlyScroll, forKey: Keys.earlyScroll) } }
+    var earlyScrollMs: Double { didSet { defaults.set(earlyScrollMs, forKey: Keys.earlyScrollMs) } }
     /// × the brightness of the translation under a line.
     var translationBrightness: Double { didSet { defaults.set(translationBrightness, forKey: Keys.translationBrightness) } }
     /// × the saturation of the cover behind the lyrics (app and PiP).
@@ -187,9 +190,6 @@ final class AppSettings {
     var lastSeenVersion: String { didSet { defaults.set(lastSeenVersion, forKey: Keys.lastSeenVersion) } }
     /// Tell about a newer stable release (Settings → About).
     var notifyUpdates: Bool { didSet { defaults.set(notifyUpdates, forKey: Keys.notifyUpdates) } }
-    /// Start scrolling to the next line a bit before it is sung.
-    var earlyScroll: Bool { didSet { defaults.set(earlyScroll, forKey: Keys.earlyScroll) } }
-    var earlyScrollMs: Double { didSet { defaults.set(earlyScrollMs, forKey: Keys.earlyScrollMs) } }
     /// A release the user chose to skip: no notice for it, only for a newer one.
     var skippedUpdateVersion: String { didSet { defaults.set(skippedUpdateVersion, forKey: Keys.skippedUpdateVersion) } }
     /// The "star on GitHub" row on the main settings page.
@@ -266,6 +266,8 @@ final class AppSettings {
             Keys.lyricsWeight: LyricsWeight.bold.rawValue,
             Keys.activeLinePosition: 0.5,
             Keys.scrollSpeed: 1.0,
+            Keys.earlyScroll: false,
+            Keys.earlyScrollMs: 250.0,
             Keys.translationBrightness: 1.0,
             Keys.backgroundSaturation: 1.0,
             Keys.lyricsFrameRate: 60.0,
@@ -291,8 +293,6 @@ final class AppSettings {
         powerSaving = defaults.bool(forKey: Keys.powerSaving)
         showVolumeSlider = defaults.bool(forKey: Keys.volumeSlider)
         gesturesEnabled = defaults.bool(forKey: Keys.gestures)
-            Keys.earlyScroll: false,
-            Keys.earlyScrollMs: 250.0,
         compensateOutputLatency = defaults.bool(forKey: Keys.outputLatency)
         useAppRemote = defaults.object(forKey: Keys.appRemote) as? Bool ?? true
         webPollInterval = defaults.object(forKey: Keys.webPollInterval) as? Double ?? 2
@@ -342,6 +342,8 @@ final class AppSettings {
         lyricsWeight = defaults.string(forKey: Keys.lyricsWeight) ?? LyricsWeight.bold.rawValue
         activeLinePosition = defaults.double(forKey: Keys.activeLinePosition)
         scrollSpeed = defaults.double(forKey: Keys.scrollSpeed)
+        earlyScroll = defaults.bool(forKey: Keys.earlyScroll)
+        earlyScrollMs = defaults.double(forKey: Keys.earlyScrollMs)
         translationBrightness = defaults.double(forKey: Keys.translationBrightness)
         backgroundSaturation = defaults.double(forKey: Keys.backgroundSaturation)
         lyricsFrameRate = defaults.double(forKey: Keys.lyricsFrameRate)
@@ -375,8 +377,6 @@ final class AppSettings {
     var validSpicyKey: String? {
         bundledSpicyLyricsKey ?? Self.clientKey(spicyLyricsKey)
     }
-        earlyScroll = defaults.bool(forKey: Keys.earlyScroll)
-        earlyScrollMs = defaults.double(forKey: Keys.earlyScrollMs)
 
     var hasBundledSpicyKey: Bool { bundledSpicyLyricsKey != nil }
 
@@ -429,6 +429,8 @@ final class AppSettings {
         lyricsWeight = LyricsWeight.bold.rawValue
         activeLinePosition = 0.5
         scrollSpeed = 1
+        earlyScroll = false
+        earlyScrollMs = 250
     }
 
     /// The translation's own look (its page in settings).
@@ -462,8 +464,6 @@ final class AppSettings {
     func resetBackground() {
         dynamicBackground = true
         backgroundDim = Self.defaultBackgroundDim
-        earlyScroll = false
-        earlyScrollMs = 250
         backgroundSpeed = 1
         backgroundBlur = 1
         backgroundSaturation = 1
@@ -542,6 +542,8 @@ final class AppSettings {
         static let pipFormat = "pipFormat"
         static let activeLinePosition = "activeLinePosition"
         static let scrollSpeed = "scrollSpeed"
+        static let earlyScroll = "earlyScroll"
+        static let earlyScrollMs = "earlyScrollMs"
         static let translationBrightness = "translationBrightness"
         static let backgroundSaturation = "backgroundSaturation"
         static let lyricsFrameRate = "lyricsFrameRate"
@@ -593,8 +595,6 @@ enum ArtworkBackground: String, CaseIterable, Identifiable {
         }
     }
 }
-        static let earlyScroll = "earlyScroll"
-        static let earlyScrollMs = "earlyScrollMs"
 
 /// Where the nebula behind the big cover takes its colours from.
 enum NebulaColors: String, CaseIterable, Identifiable {

@@ -109,6 +109,11 @@ struct LyricsView: View {
                         let _ = animator.step(position: player.position(at: now), now: now,
                                               blurEnabled: settings.blurInactiveLines && !userScrolling && !reduced)
                         let focus = animator.focusIndex
+                        // Early scroll: the line the scroll follows is the one that starts shortly.
+                        let scrollFocus = settings.earlyScroll && shown.kind != .static && !animator.lyrics.lines.isEmpty
+                            ? LyricsAnimator.focus(in: animator.lyrics.lines,
+                                                   at: player.position(at: now) + settings.earlyScrollMs / 1000)
+                            : focus
                         let visuals = animator.visuals
 
                         let _ = culling.sync(CullingKey(typography: typography, topInset: topInset, bottomInset: bottomInset,
@@ -125,11 +130,6 @@ struct LyricsView: View {
                                 .padding(.top, typography.fontSize * 0.45)
                         }
                         .padding(.horizontal, horizontalPadding)
-                        // Early scroll: the line the scroll follows is the one that starts shortly.
-                        let scrollFocus = settings.earlyScroll && shown.kind != .static && !animator.lyrics.lines.isEmpty
-                            ? LyricsAnimator.focus(in: animator.lyrics.lines,
-                                                   at: player.position(at: now) + clockOffset + settings.earlyScrollMs / 1000)
-                            : focus
                         .padding(.vertical, geometry.size.height * 0.6)
                         // iOS 17 has no scroll phases: a view inside the scroll view watches its pan.
                         .background {
