@@ -21,6 +21,10 @@ struct LyricsView: View {
     /// Tapping a line seeks to it. Off while the controls are hidden: the first tap only brings
     /// them back, so reaching the buttons from full-screen lyrics never rewinds the song.
     var tapSeeks = true
+    /// Seconds added to the clock (the TV shows its picture later than the sound plays).
+    var clockOffset: Double = 0
+    /// At most 30 fps (the phone is warm).
+    var lowFrameRate = false
 
     @State private var animator: LyricsAnimator
     @State private var userScrolling = false
@@ -33,12 +37,16 @@ struct LyricsView: View {
     @State private var frameCounter = FrameRateCounter()
     /// Which lines are far enough off screen to skip drawing.
     @State private var culling = LineCulling()
+    /// The line held down: its actions show in a dialog outside the per-frame timeline. A
+    /// context menu on the line itself was rebuilt every frame, and its buttons did nothing.
+    @State private var menuLine: PreparedLine?
+    @State private var menuTick = 0
 
     init(lyrics: PreparedLyrics, player: PlayerModel, settings: AppSettings,
          topInset: CGFloat = 0, bottomInset: CGFloat = 0, horizontalPadding: CGFloat = 24,
          reduced: Bool = false, fontScale: CGFloat = 1,
          onInteraction: @escaping () -> Void = {}, onBackgroundTap: @escaping () -> Void = {},
-         tapSeeks: Bool = true) {
+         tapSeeks: Bool = true, clockOffset: Double = 0, lowFrameRate: Bool = false) {
         self.lyrics = lyrics
         self.player = player
         self.settings = settings
@@ -50,6 +58,8 @@ struct LyricsView: View {
         self.onInteraction = onInteraction
         self.onBackgroundTap = onBackgroundTap
         self.tapSeeks = tapSeeks
+        self.clockOffset = clockOffset
+        self.lowFrameRate = lowFrameRate
         _animator = State(initialValue: LyricsAnimator(lyrics: lyrics, simple: settings.simpleLyricsMode,
                                                        minimal: settings.minimalLyricsMode,
                                                        refreshed: settings.refreshedSimpleLyrics))
@@ -69,7 +79,7 @@ struct LyricsView: View {
             fontSize: clamp(CGFloat(settings.fontSize) * pinchScale, AppSettings.fontRange.lowerBound,
                             AppSettings.fontRange.upperBound) * fontScale,
             cqw: max(width, 1) / 100,
-            hasDuets: shown.lines.contains(where: \.oppositeAligned),
+            hasDuets: settings.duetLinePadding && shown.lines.contains(where: \.oppositeAligned),
             simple: settings.simpleLyricsMode,
             centered: settings.centerLyrics,
             font: LyricsFontChoice(stored: settings.lyricsFont),
@@ -101,9 +111,14 @@ struct LyricsView: View {
     private static let userScrollCooldown: TimeInterval = 0.75
 
     private var frameInterval: Double {
+        // Unsynced lyrics never move by themselves: a few frames a second notice a seek.
+        if shown.kind == .static { return 1.0 / 4 }
         if !player.isPlaying { return 1.0 / 15 }
-        let target = max(15, settings.lyricsFrameRate)
-        return 1 / (reduced ? min(30, target) : target)
+        var target = max(15, settings.lyricsFrameRate)
+        // Line by line, only a slow sweep moves between lines (the scroll is Core Animation's
+        // own, at the screen's rate): 30 fps looks the same and costs half.
+        if reduced || lowFrameRate || shown.kind == .line { target = min(30, target) }
+        return 1 / target
     }
 
     var body: some View {
@@ -115,14 +130,14 @@ struct LyricsView: View {
                     TimelineView(.animation(minimumInterval: frameInterval)) { _ in
                         let now = MediaClock.now()
                         let _ = settings.showLyricsFPS ? frameCounter.tick(now) : ()
-                        let _ = animator.step(position: player.position(at: now), now: now,
+                        let _ = animator.step(position: player.position(at: now) + clockOffset, now: now,
                                               blurEnabled: settings.blurInactiveLines && !userScrolling && !reduced,
-                                              options: animatorOptions)
+                                              frameInterval: frameInterval, options: animatorOptions)
                         let focus = animator.focusIndex
                         // Early scroll: the line the scroll follows is the one that starts shortly.
                         let scrollFocus = settings.earlyScroll && shown.kind != .static && !animator.lyrics.lines.isEmpty
                             ? LyricsAnimator.focus(in: animator.lyrics.lines,
-                                                   at: player.position(at: now) + settings.earlyScrollMs / 1000)
+                                                   at: player.position(at: now) + clockOffset + settings.earlyScrollMs / 1000)
                             : focus
                         let visuals = animator.visuals
 
@@ -141,7 +156,7 @@ struct LyricsView: View {
                                               refined: settings.refinedCredits,
                                               followLastLine: settings.creditsFollowLastLine && !settings.centerLyrics,
                                               allSung: shown.kind == .static
-                                                  || player.position(at: now) >= (shown.lines.last?.end ?? 0))
+                                                  || player.position(at: now) + clockOffset >= (shown.lines.last?.end ?? 0))
                                 .padding(.top, typography.lineSpacing)
                         }
                         .padding(.horizontal, horizontalPadding)
@@ -159,7 +174,8 @@ struct LyricsView: View {
                             guard shown.kind != .static, !userScrolling, Date() >= resumeAutoScrollAt else { return }
                             // After a seek or a gap (back from the background or PiP) jump to the
                             // line: gliding across half the song would show it was ever behind.
-                            if animator.snapped {
+                            // Smooth Scrolling off: the lyrics jump to the line, like the extension's default.
+                            if animator.snapped || !settings.smoothScrolling {
                                 proxy.scrollTo(newFocus, anchor: anchor)
                             } else {
                                 withAnimation(scrollAnimation) {
@@ -171,7 +187,7 @@ struct LyricsView: View {
                         .onChange(of: player.snapToken) { _, _ in
                             animator.snapNext()
                             let now = MediaClock.now()
-                            animator.step(position: player.position(at: now), now: now,
+                            animator.step(position: player.position(at: now) + clockOffset, now: now,
                                           blurEnabled: settings.blurInactiveLines && !userScrolling && !reduced,
                                           options: animatorOptions)
                             guard shown.kind != .static, !userScrolling else { return }
@@ -208,7 +224,7 @@ struct LyricsView: View {
                 }
                 .overlay(alignment: .topLeading) {
                     if settings.showLyricsFPS {
-                        FPSBadge(counter: frameCounter, target: player.isPlaying ? 1 / frameInterval : 15)
+                        FPSBadge(counter: frameCounter, target: 1 / frameInterval)
                             .padding(.top, topInset + 6)
                             .padding(.leading, horizontalPadding)
                     }
@@ -229,6 +245,20 @@ struct LyricsView: View {
                 }
             }
         }
+        .sensoryFeedback(.impact(weight: .medium), trigger: menuTick)
+        .confirmationDialog(menuTitle, isPresented: menuShown, titleVisibility: .visible, presenting: menuLine) { line in
+            lineActions(line)
+        }
+    }
+
+    private var menuShown: Binding<Bool> {
+        Binding(get: { menuLine != nil }, set: { if !$0 { menuLine = nil } })
+    }
+
+    /// The held line, shortened if it is long.
+    private var menuTitle: String {
+        let text = menuLine?.plainText ?? ""
+        return text.count > 80 ? String(text.prefix(80)) + "…" : text
     }
 
     /// The user started or stopped dragging the lyrics.
@@ -264,7 +294,7 @@ struct LyricsView: View {
 extension LyricsView {
     /// Lines this far (in screens) beyond the visible area are still drawn: a quick flick must not
     /// outrun them.
-    private static let cullMargin: CGFloat = 1.25
+    private static let cullMargin: CGFloat = 0.8
     /// The lines around the one being sung are always drawn.
     private static let alwaysDrawn = 3
 
@@ -297,7 +327,12 @@ extension LyricsView {
                         resumeAutoScrollAt = .distantPast
                         player.seekLyrics(to: seekTarget(line))
                     }
-                    .contextMenu { lineMenu(line) }
+                    .onLongPressGesture(minimumDuration: 0.4) {
+                        guard !line.isInterlude else { return }
+                        onInteraction()
+                        menuTick += 1
+                        menuLine = line
+                    }
                     // Entirely under the header or the controls: nobody sees it, so it is not
                     // there for taps and long presses either (a scroll still passes through).
                     .allowsHitTesting(culling.isTouchable(line.id))
@@ -325,31 +360,45 @@ extension LyricsView {
         return max(0, line.start - lead - settings.timingOffsetMs / 1000 + player.appliedOutputLatency)
     }
 
-    /// Long press on a line.
+    /// Long press on a line: what can be done with it.
     @ViewBuilder
-    func lineMenu(_ line: PreparedLine) -> some View {
-        if !line.isInterlude {
-            if shown.kind != .static {
-                Button {
-                    player.seekLyrics(to: seekTarget(line))
-                } label: {
-                    Label(String(localized: "Перемотать сюда"), systemImage: "play.circle")
-                }
-            }
-            Button {
-                UIPasteboard.general.string = line.plainText
-            } label: {
-                Label(String(localized: "Скопировать строку"), systemImage: "doc.on.doc")
-            }
-            Button {
-                UIPasteboard.general.string = shown.lines.filter { !$0.isInterlude }.map(\.plainText).joined(separator: "\n")
-            } label: {
-                Label(String(localized: "Скопировать весь текст"), systemImage: "doc.on.doc.fill")
-            }
-            ShareLink(item: line.plainText) {
-                Label(String(localized: "Поделиться строкой"), systemImage: "square.and.arrow.up")
+    func lineActions(_ line: PreparedLine) -> some View {
+        if shown.kind != .static {
+            Button(String(localized: "Перемотать сюда")) {
+                resumeAutoScrollAt = .distantPast
+                player.seekLyrics(to: seekTarget(line))
             }
         }
+        Button(String(localized: "Скопировать строку")) {
+            UIPasteboard.general.string = line.plainText
+        }
+        Button(String(localized: "Скопировать весь текст")) {
+            UIPasteboard.general.string = shown.lines.filter { !$0.isInterlude }.map(\.plainText).joined(separator: "\n")
+        }
+        Button(String(localized: "Поделиться строкой")) {
+            ShareSheet.present(line.plainText)
+        }
+        Button(String(localized: "Отмена"), role: .cancel) {}
+    }
+}
+
+/// The system share sheet over whatever is on screen.
+enum ShareSheet {
+    @MainActor
+    static func present(_ text: String) {
+        let scene = UIApplication.shared.connectedScenes
+            .filter { $0.session.role == .windowApplication }
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        guard var top = scene?.keyWindow?.rootViewController else { return }
+        while let presented = top.presentedViewController { top = presented }
+        let sheet = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+        // iPad: from the middle of the screen.
+        sheet.popoverPresentationController?.sourceView = top.view
+        sheet.popoverPresentationController?.sourceRect = CGRect(x: top.view.bounds.midX, y: top.view.bounds.midY,
+                                                                width: 0, height: 0)
+        sheet.popoverPresentationController?.permittedArrowDirections = []
+        top.present(sheet, animated: true)
     }
 }
 

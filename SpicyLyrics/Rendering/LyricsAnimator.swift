@@ -372,6 +372,29 @@ final class LyricsAnimator {
     private var lastPosition: Double?
     /// The last step jumped to the clock instead of animating (a seek, a resume, `snapNext()`).
     private(set) var snapped = true
+    /// Smoothed time between frames actually drawn.
+    private var frameTime: Double?
+    private var expectedFrameTime: Double?
+    /// Seconds the lyrics run ahead of the clock while frames come slower than asked for.
+    private(set) var presentationLead: Double = 0
+
+    /// A frame computed at `now` reaches the screen about one frame time later and stays there
+    /// for another frame time. At the requested rate that delay is what the sync was set up with;
+    /// when frames drop (a hot phone, a busy main thread) it grows, and the words fall behind
+    /// the sound. Run ahead by the extra so they stay on time.
+    private func updateLead(dt: Double, expected: Double?) {
+        guard let expected, dt > 0.006, dt < 0.4 else { return }
+        // A new rate (paused at 15 fps, playing again at 60): start from it, not from the old one.
+        if expected != expectedFrameTime {
+            expectedFrameTime = expected
+            frameTime = expected
+            presentationLead = 0
+            return
+        }
+        let smoothed = frameTime.map { $0 + (dt - $0) * (dt > $0 ? 0.3 : 0.08) } ?? dt
+        frameTime = smoothed
+        presentationLead = clamp(1.5 * (smoothed - expected * 1.1), 0, 0.15)
+    }
 
     /// The next step jumps straight to the clock (it was just checked and may have moved).
     func snapNext() { lastPosition = nil }
@@ -391,15 +414,20 @@ final class LyricsAnimator {
     }
 
     /// Advances every spring to `position` (seconds). Safe to call more than once per frame.
-    func step(position: Double, now: CFTimeInterval, blurEnabled: Bool,
+    /// `frameInterval` is the frame time the caller asked for: frames coming slower than that
+    /// move the lyrics ahead by the extra delay before they are seen (nil: no compensation).
+    func step(position: Double, now: CFTimeInterval, blurEnabled: Bool, frameInterval: Double? = nil,
               options: Options = Options()) {
-        let position = position + (simple ? Curves.simplePositionOffset : 0)
         var dt = lastFrame.map { now - $0 } ?? (1.0 / 60)
         if dt <= 0 { return }
+        updateLead(dt: dt, expected: frameInterval)
+        let position = position + presentationLead + (simple ? Curves.simplePositionOffset : 0)
         // No frames for a while (the app or the floating window was hidden, the phone stalled):
         // whatever the springs were doing is stale, so snap like after a seek.
         let resumed = dt > 0.4
-        dt = min(dt, 1.0 / 15)
+        // The springs are solved exactly for any step, so a slow frame takes its whole length:
+        // capping it (it used to stop at 1/15 s) made them lag further behind the lower the fps.
+        dt = min(dt, 0.25)
         // A seek: snap everything instead of animating across the whole song.
         let jumped = resumed || lastPosition.map { abs(position - $0) > 1.5 } ?? true
         lastFrame = now

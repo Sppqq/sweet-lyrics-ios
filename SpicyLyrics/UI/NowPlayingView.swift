@@ -4,6 +4,7 @@ import SwiftUI
 /// full-height lyrics and fade away while a song plays. Landscape puts artwork and controls on
 /// the left, lyrics on the right.
 struct NowPlayingView: View {
+    @ObservedObject private var externalDisplay = ExternalDisplay.shared
     @Environment(PlayerModel.self) private var player
     @Environment(AppSettings.self) private var settings
     @EnvironmentObject private var auth: SpotifyAuth
@@ -39,8 +40,19 @@ struct NowPlayingView: View {
     #else
     @State private var artworkMode = false
     #endif
+    /// The small cover in the header grows into the big one and shrinks back into it.
+    @Namespace private var coverSpace
 
     private static let chromeAnimation = Animation.easeInOut(duration: 0.45)
+    /// The badges at the top of the lyrics each take a row of their own (a long sync badge ran
+    /// into the FPS one): FPS, then the sync badge, then any notice.
+    private static let badgeRow: CGFloat = 30
+    private var syncBadgeOffset: CGFloat { settings.showLyricsFPS ? Self.badgeRow : 0 }
+    private var fpsBadgeClearance: CGFloat {
+        syncBadgeOffset + (settings.showSyncIndicator ? Self.badgeRow : 0)
+    }
+    /// The small cover in the header.
+    private static let miniArtworkSide: CGFloat = 54
 
     var body: some View {
         GeometryReader { geometry in
@@ -64,7 +76,8 @@ struct NowPlayingView: View {
                     imageID: player.artworkID,
                     artistImage: player.artistImage,
                     canvasURL: player.canvasURL,
-                    animated: settings.dynamicBackground && !reduced,
+                    // A remote for the TV meanwhile: nothing needs to move on the phone.
+                    animated: settings.dynamicBackground && !reduced && !tvMode,
                     playing: player.isPlaying,
                     dim: settings.backgroundDim,
                     speed: settings.backgroundSpeed,
@@ -78,6 +91,7 @@ struct NowPlayingView: View {
                         // Less than half the background's darkening: the nebula should glow, the lines still read.
                         CoverVisualizerView(player: player, reduced: reduced, dim: settings.backgroundDim * 0.4,
                                             randomColors: settings.nebulaColors == NebulaColors.random.rawValue,
+                                            stars: settings.nebulaStars,
                                             frameCounter: settings.showLyricsFPS ? nebulaFrames : nil,
                                             maxFrameRate: Int(settings.lyricsFrameRate))
                             .allowsHitTesting(false)
@@ -103,7 +117,7 @@ struct NowPlayingView: View {
                         .environment(\.colorScheme, .dark)
                         .padding(.horizontal, 24)
                         .frame(maxHeight: .infinity, alignment: .top)
-                        .padding(.top, (chromeVisible && !landscape ? headerHeight : 0) + 8)
+                        .padding(.top, (chromeVisible && !landscape ? headerHeight : 0) + 8 + fpsBadgeClearance)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                         .allowsHitTesting(false)
                 }
@@ -151,6 +165,10 @@ struct NowPlayingView: View {
         .animation(.easeInOut(duration: 0.3), value: player.autoSkipNotice)
         .onChange(of: lyricsOnly) { _, value in
             if value { hideChrome() }
+        }
+        // The TV panel needs the controls around it.
+        .onChange(of: tvMode, initial: true) { _, value in
+            if value { showChrome() }
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
@@ -235,9 +253,10 @@ struct NowPlayingView: View {
         var eligible: Bool
     }
 
-    /// The app's window, or nil before it exists.
+    /// The app's window, or nil before it exists (never the external screen's).
     private static var keyWindow: UIWindow? {
         UIApplication.shared.connectedScenes
+            .filter { $0.session.role == .windowApplication }
             .compactMap { ($0 as? UIWindowScene)?.keyWindow }
             .first
     }
@@ -326,9 +345,12 @@ struct NowPlayingView: View {
         }
     }
 
+    /// A TV shows the lyrics: the phone shows the TV's settings in their place.
+    private var tvMode: Bool { externalDisplay.isConnected && !settings.tvPhoneLyrics }
+
     /// The experimental visualizer fills in for lyrics hidden by the user's choice.
     private var showVisualizer: Bool {
-        CoverVisualizer.isSupported
+        CoverVisualizer.isSupported && !tvMode
             && ((bigArtworkShown && settings.artworkBackground == ArtworkBackground.nebula.rawValue)
                 || (lyricsHidden && settings.hiddenLyricsView == HiddenLyricsView.visualizer.rawValue))
     }
@@ -336,7 +358,7 @@ struct NowPlayingView: View {
     /// The big cover instead of the lyrics: chosen with the bottom-left button, or the setting
     /// for songs whose lyrics are hidden.
     private var bigArtworkShown: Bool {
-        artworkMode || (lyricsHidden && settings.hiddenLyricsView == HiddenLyricsView.artwork.rawValue)
+        !tvMode && (artworkMode || (lyricsHidden && settings.hiddenLyricsView == HiddenLyricsView.artwork.rawValue))
     }
 
     /// Synced lyrics for the line under the big cover.
@@ -350,7 +372,7 @@ struct NowPlayingView: View {
     private var backgroundOnly: Bool { isLandscape && lyricsHidden }
 
     private var canAutoHide: Bool {
-        guard chromeVisible, !showSettings, !showPicker, !showSetupGuide, !showOwnLyrics else { return false }
+        guard chromeVisible, !tvMode, !showSettings, !showPicker, !showSetupGuide, !showOwnLyrics else { return false }
         return lyricsOnly || backgroundOnly || (settings.autoHideControls && player.isPlaying && lyricsLoaded)
     }
 
@@ -375,6 +397,12 @@ struct NowPlayingView: View {
 
     private func hideChrome() {
         withAnimation(Self.chromeAnimation) { chromeVisible = false }
+    }
+
+    /// The big cover in place of the lyrics, or back.
+    private func toggleArtworkMode() {
+        showChrome()
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.86)) { artworkMode.toggle() }
     }
 
     // MARK: Gestures & keyboard
@@ -553,10 +581,14 @@ struct NowPlayingView: View {
     /// Small artwork and title. Tap to pick a track, swipe sideways to skip.
     private var trackInfo: some View {
         HStack(spacing: 12) {
-            // The big cover is on screen: no need for the small one.
+            // The big cover is on screen: no need for the small one. A tap on it opens the big
+            // cover (the title next to it keeps opening the track list).
             if !bigArtworkShown {
-                artwork(side: 54, cornerRadius: 6)
-                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+                heroArtwork(side: Self.miniArtworkSide, cornerRadius: 6)
+                    .transition(.opacity)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityLabel(String(localized: "Показать обложку"))
+                    .accessibilityAction { toggleArtworkMode() }
             }
             titleBlock
         }
@@ -564,9 +596,15 @@ struct NowPlayingView: View {
         .contentShape(Rectangle())
         .offset(x: headerSwipe)
         .opacity(1 - min(Double(abs(headerSwipe)) / 160, 0.6))
-        .onTapGesture {
-            showChrome()
-            if player.supportsSpotifyFeatures { showPicker = true }
+        // One tap for the whole row, sorted by where it lands: a tap of the cover's own lost to
+        // this one, so the small cover opened the track list instead of the big cover.
+        .onTapGesture(coordinateSpace: .local) { location in
+            if !bigArtworkShown, location.x <= Self.miniArtworkSide + 6 {
+                toggleArtworkMode()
+            } else {
+                showChrome()
+                if player.supportsSpotifyFeatures { showPicker = true }
+            }
         }
         .gesture(
             DragGesture(minimumDistance: 28)
@@ -604,18 +642,34 @@ struct NowPlayingView: View {
     }
 
     private func artwork(side: CGFloat, cornerRadius: CGFloat) -> some View {
+        artworkFill(cornerRadius: cornerRadius)
+            .frame(width: side, height: side)
+    }
+
+    /// The header's cover and the big one are the same view to SwiftUI: switching between them
+    /// flies the cover from one place to the other, growing or shrinking on the way.
+    private func heroArtwork(side: CGFloat, cornerRadius: CGFloat) -> some View {
+        artworkFill(cornerRadius: cornerRadius)
+            .matchedGeometryEffect(id: "cover", in: coverSpace)
+            .frame(width: side, height: side)
+    }
+
+    /// The cover filling whatever size it is offered.
+    private func artworkFill(cornerRadius: CGFloat) -> some View {
         Group {
             if let artwork = player.artwork {
                 Image(uiImage: artwork).resizable().scaledToFill()
             } else {
-                Image(systemName: "music.note")
-                    .font(.system(size: side * 0.35))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(.white.opacity(0.1))
+                GeometryReader { geometry in
+                    Image(systemName: "music.note")
+                        .font(.system(size: min(geometry.size.width, geometry.size.height) * 0.35))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                }
+                .background(.white.opacity(0.1))
             }
         }
-        .frame(width: side, height: side)
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 
@@ -697,9 +751,7 @@ struct NowPlayingView: View {
         PlaybackBar(
             onInteraction: { showChrome() },
             onShowQueue: { if player.supportsSpotifyFeatures { showPicker = true } },
-            onToggleLyrics: {
-                withAnimation(.easeInOut(duration: 0.45)) { artworkMode.toggle() }
-            },
+            onToggleLyrics: { toggleArtworkMode() },
             lyricsShown: !bigArtworkShown,
             lyricsAvailable: lyricsAvailable,
             isVisible: chromeVisible,
@@ -728,8 +780,43 @@ struct NowPlayingView: View {
 
     // MARK: Lyrics
 
-    @ViewBuilder
+    /// The lyrics (or what stands in for them), or the TV's settings while a TV shows them.
     private func lyricsArea(topInset: CGFloat, bottomInset: CGFloat, horizontalPadding: CGFloat) -> some View {
+        ZStack {
+            if tvMode {
+                TVControlPanel(topInset: topInset, bottomInset: bottomInset) {
+                    withAnimation(.spring(response: 0.7, dampingFraction: 0.88)) { settings.tvPhoneLyrics = true }
+                }
+                .transition(.blurFade)
+            } else {
+                phoneLyricsArea(topInset: topInset, bottomInset: bottomInset, horizontalPadding: horizontalPadding)
+                    .transition(.blurFade)
+            }
+        }
+        .animation(.spring(response: 0.7, dampingFraction: 0.88), value: tvMode)
+        .overlay(alignment: .bottom) {
+            // The lyrics are on the phone by choice: one tap back to the TV's settings.
+            if externalDisplay.isConnected && settings.tvPhoneLyrics && chromeVisible {
+                Button {
+                    withAnimation(.spring(response: 0.7, dampingFraction: 0.88)) { settings.tvPhoneLyrics = false }
+                } label: {
+                    Label(String(localized: "Настройки телевизора"), systemImage: "airplay.video")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .environment(\.colorScheme, .dark)
+                }
+                .buttonStyle(SquishButtonStyle())
+                .padding(.bottom, bottomInset + 12)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func phoneLyricsArea(topInset: CGFloat, bottomInset: CGFloat, horizontalPadding: CGFloat) -> some View {
         if bigArtworkShown || lyricsHidden {
             ZStack {
                 Color.clear
@@ -775,10 +862,12 @@ struct NowPlayingView: View {
             let blockTop = topInset + freeHeight / 2 - (side + gap + lineHeight) / 2
             ZStack(alignment: .topLeading) {
                 ZStack {
-                    artwork(side: side, cornerRadius: max(10, side * 0.035))
+                    artworkFill(cornerRadius: max(10, side * 0.035))
                         .id(player.artworkID)
                         .transition(.opacity)
                 }
+                .matchedGeometryEffect(id: "cover", in: coverSpace)
+                .frame(width: side, height: side)
                 .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
                 .scaleEffect(player.isPlaying ? 1 : 0.88)
                 .position(x: geometry.size.width / 2, y: blockTop + side / 2)
@@ -810,7 +899,7 @@ struct NowPlayingView: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
                         .background(.ultraThinMaterial, in: Capsule())
-                        .padding(.top, topInset + 8)
+                        .padding(.top, topInset + 8 + fpsBadgeClearance)
                         .transition(.opacity)
                 }
             }
@@ -832,13 +921,14 @@ struct NowPlayingView: View {
                 horizontalPadding: horizontalPadding, reduced: reduced, fontScale: lyricFontScale,
                 onInteraction: { showChrome() },
                 onBackgroundTap: { toggleChrome() },
-                tapSeeks: chromeVisible || lyricsOnly
+                tapSeeks: chromeVisible || lyricsOnly,
+                lowFrameRate: performance.warm
             )
             .id(player.lyricsRevision)
             .overlay(alignment: .topTrailing) {
                 if settings.showSyncIndicator {
                     SyncIndicator()
-                        .padding(.top, topInset + 6)
+                        .padding(.top, topInset + 6 + syncBadgeOffset)
                         .padding(.trailing, horizontalPadding)
                 }
             }

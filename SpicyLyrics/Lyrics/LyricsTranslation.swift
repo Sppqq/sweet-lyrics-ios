@@ -6,6 +6,8 @@ import Translation
 enum TranslationProvider: String, CaseIterable, Identifiable {
     /// Apple's Translation framework, on the device (iOS 18+).
     case apple
+    /// The app's own server (sweet.sppq.dev): Google behind a cache every install shares.
+    case server
     /// Google Translate's free web endpoint.
     case google
     /// Yandex Translate's free web endpoint.
@@ -18,6 +20,7 @@ enum TranslationProvider: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .apple: return String(localized: "Apple (на устройстве)")
+        case .server: return String(localized: "Sweet Lyrics (сервер)")
         case .google: return "Google"
         case .yandex: return String(localized: "Яндекс")
         case .deepl: return "DeepL"
@@ -32,7 +35,8 @@ enum TranslationProvider: String, CaseIterable, Identifiable {
 
     var isOnline: Bool { self != .apple }
 
-    static var defaultProvider: TranslationProvider { TranslationProvider.apple.isAvailable ? .apple : .google }
+    /// The shared cache answers most songs at once, so the server comes first.
+    static var defaultProvider: TranslationProvider { .server }
 }
 
 /// Translates the current lyrics and hands the result to the player; the lyrics show it under
@@ -223,7 +227,7 @@ private struct OnlineTranslationDriver: ViewModifier {
     }
 }
 
-/// Google and Yandex through their free web endpoints, DeepL with the user's key. Lines go in
+/// The app's server, Google and Yandex through their free web endpoints, DeepL with the user's key. Lines go in
 /// batches; answers are kept on disk (Caches), so switching modes, coming back to a song or
 /// the next launch costs no requests.
 actor OnlineTranslator {
@@ -278,6 +282,7 @@ actor OnlineTranslator {
         guard !missing.isEmpty else { return result }
         let fresh: [String: String]
         switch provider {
+        case .server: fresh = try await server(missing, source: source, target: target)
         case .google: fresh = try await google(missing, target: target)
         case .yandex: fresh = try await yandex(missing, source: source, target: target)
         case .deepl: fresh = try await deepl(missing, target: target, key: deeplKey)
@@ -308,6 +313,37 @@ actor OnlineTranslator {
             guard !Task.isCancelled, let data = try? JSONEncoder().encode(cache) else { return }
             try? data.write(to: Self.cacheFile, options: .atomic)
         }
+    }
+
+    // MARK: Sweet Lyrics server
+
+    private static let serverURL = URL(string: "https://sweet.sppq.dev/v1/translate")!
+    /// The server's limits per request.
+    private static let serverLineLimit = 500
+
+    /// The server translates with Google and keeps every answer for all installs: a song someone
+    /// already listened to comes back without waiting on Google. Over its hourly limit it still
+    /// sends what it has cached (`limited`); the rest is asked for again next time.
+    private func server(_ texts: [String], source: String?, target: String) async throws -> [String: String] {
+        var result: [String: String] = [:]
+        for chunk in Self.chunks(texts.filter { $0.count <= Self.serverLineLimit }, characters: 40_000, count: 250) {
+            var request = URLRequest(url: Self.serverURL)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            var body: [String: Any] = ["target": target, "lines": chunk]
+            if let source { body["source"] = source }
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            guard let object = try await load(request, provider: .server) as? [String: Any],
+                  let rows = object["translations"] as? [String: String] else {
+                throw Failure.unreadable
+            }
+            if let cached = object["cached"] as? Int {
+                SyncLog.log("translate", "server: \(cached)/\(chunk.count) from its cache"
+                    + ((object["limited"] as? Bool) == true ? ", limited" : ""))
+            }
+            result.merge(rows) { _, new in new }
+        }
+        return result
     }
 
     // MARK: Google

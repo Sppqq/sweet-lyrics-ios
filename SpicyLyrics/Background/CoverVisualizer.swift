@@ -10,13 +10,15 @@ struct CoverVisualizerView: View {
     var dim: Double = 0
     /// Random colours (a new set for every song) instead of the cover's.
     var randomColors = false
+    /// Twinkling stars in the dark parts.
+    var stars = true
     /// Counts the frames drawn, for the FPS badge.
     var frameCounter: FrameRateCounter?
     var maxFrameRate = 60
 
     var body: some View {
         CoverVisualizer(image: player.backgroundArtwork, imageID: player.artworkID, player: player, reduced: reduced,
-                        randomColors: randomColors, frameCounter: frameCounter, maxFrameRate: maxFrameRate)
+                        randomColors: randomColors, stars: stars, frameCounter: frameCounter, maxFrameRate: maxFrameRate)
             .overlay(Color.black.opacity(dim))
             .ignoresSafeArea()
     }
@@ -31,6 +33,7 @@ struct CoverVisualizer: UIViewRepresentable {
     let player: PlayerModel
     var reduced = false
     var randomColors = false
+    var stars = true
     var frameCounter: FrameRateCounter?
     /// The most frames per second it may draw (the lyrics' setting).
     var maxFrameRate = 60
@@ -53,6 +56,7 @@ struct CoverVisualizer: UIViewRepresentable {
         view.playing = player.isPlaying
         view.maxFrameRate = maxFrameRate
         view.reduced = reduced
+        view.stars = stars
         view.frameCounter = frameCounter
         view.setImage(image, id: imageID, random: randomColors)
     }
@@ -72,18 +76,21 @@ final class VisualizerSurface: ShaderSurface {
         var time: Float
         var progress: Float
         var energy: Float
+        var stars: Float
     }
 
     var playing = false { didSet { updateRate() } }
     var reduced = false { didSet { updateRate() } }
     var maxFrameRate = 60 { didSet { updateRate() } }
+    var stars = true
     var progress: () -> Double = { 0 }
     var frameCounter: FrameRateCounter?
 
     /// The frame rate it runs at.
     static func framesPerSecond(playing: Bool, reduced: Bool, maxFrameRate: Int = 60) -> Int {
-        // The flow is slow, so more than 60 never shows; paused it settles to a trickle.
-        reduced ? 20 : (playing ? min(max(30, maxFrameRate), 60) : 20)
+        // The flow is slow: 30 fps looks the same as 60 (and heated the phone); paused it
+        // settles to a trickle.
+        reduced ? 20 : (playing ? min(max(24, maxFrameRate), 30) : 15)
     }
 
     private var palette = CoverPalette.fallback
@@ -105,8 +112,9 @@ final class VisualizerSurface: ShaderSurface {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        // About 1.5 pixels per point on a phone, capped on iPad: soft glow needs no more.
-        let scale = min(1.5, 760 / max(bounds.width, 1))
+        // One pixel per point on a phone, fewer on iPad and TVs: the glow is soft, and the
+        // compositor's linear filtering hides the rest.
+        let scale = min(1, 600 / max(bounds.width, 1))
         let size = CGSize(width: max(1, (bounds.width * scale).rounded()), height: max(1, (bounds.height * scale).rounded()))
         if drawableSize != size { drawableSize = size }
     }
@@ -157,13 +165,13 @@ final class VisualizerSurface: ShaderSurface {
         var uniforms = Uniforms(deep: palette.deep, vivid: palette.vivid, accent: palette.accent,
                                 resolution: SIMD2(Float(drawableSize.width), Float(drawableSize.height)),
                                 time: Float(time.truncatingRemainder(dividingBy: 10_000)),
-                                progress: Float(progress()), energy: Float(energy))
+                                progress: Float(progress()), energy: Float(energy), stars: stars ? 1 : 0)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
     }
 }
 
-/// Three colours picked from a cover: its darkest tone, its most vivid colour and a second vivid
-/// colour of another hue, brightened enough to glow.
+/// Three colours picked from a cover: a dark shade and the cover's average colour, plus its most
+/// vivid colour of another hue for the rims, all kept dim enough to sit behind the cover.
 struct CoverPalette {
     var deep: SIMD3<Float>
     var vivid: SIMD3<Float>
@@ -217,22 +225,28 @@ struct CoverPalette {
             pixels.append(SIMD3<Float>(r, g, b))
         }
 
-        // Colours come from the most colourful pixels only (the top sixth by chroma), so a few
-        // bright flowers count for more than a large beige wall: averaging everything gave mud.
+        // The main colour is the cover's average, so the nebula reads as the cover itself; the
+        // second one comes from its most colourful pixels (the top sixth by chroma), so a few
+        // bright flowers still shimmer through.
         func chroma(_ color: SIMD3<Float>) -> Float {
             let (_, s, v) = hsv(color)
             return s * v
         }
+        var sum = SIMD3<Float>(repeating: 0)
+        for pixel in pixels { sum += pixel }
+        let mean = sum / Float(pixels.count)
+        let (meanHue, meanSaturation, _) = hsv(mean)
+
         let byChroma = pixels.sorted { chroma($0) > chroma($1) }
         let colourful = Array(byChroma.prefix(max(24, pixels.count / 6)))
 
-        // A grey or black-and-white cover: moonlight, a cool silver blue with a violet edge.
-        guard let best = colourful.first, chroma(best) >= 0.15 else {
-            return CoverPalette(deep: rgb(h: 0.64, s: 0.55, v: 0.1), vivid: rgb(h: 0.6, s: 0.32, v: 0.95),
-                                accent: rgb(h: 0.72, s: 0.38, v: 1))
+        // A grey or black-and-white cover: moonlight, a dim silver blue with a violet edge.
+        guard let best = colourful.first, chroma(best) >= 0.15 || meanSaturation >= 0.12 else {
+            return CoverPalette(deep: rgb(h: 0.64, s: 0.55, v: 0.08), vivid: rgb(h: 0.6, s: 0.3, v: 0.5),
+                                accent: rgb(h: 0.72, s: 0.35, v: 0.58))
         }
 
-        // k-means (k = 4) over those, seeded around the colour wheel.
+        // k-means (k = 4) over the colourful pixels, seeded around the colour wheel.
         let byHue = colourful.sorted { hsv($0).h < hsv($1).h }
         var centers: [SIMD3<Float>] = []
         for k in 0..<4 {
@@ -267,32 +281,28 @@ struct CoverPalette {
             chroma(cluster.color) * (0.3 + sqrt(cluster.share))
         }
         let ranked = clusters.sorted { score($0) > score($1) }
-        let lead = ranked.first?.color ?? best
-        let leadHue = hsv(lead).h
-        let second = ranked.dropFirst().first { cluster in
+        // An almost grey average has no hue of its own: the most vivid colour leads instead.
+        let leadHue = meanSaturation >= 0.12 ? meanHue : hsv(ranked.first?.color ?? best).h
+        let leadSaturation = min(0.7, max(0.35, meanSaturation * 1.4))
+        let second = ranked.first { cluster in
             let difference = abs(hsv(cluster.color).h - leadHue)
             return min(difference, 1 - difference) > 0.07 && chroma(cluster.color) > 0.15
         }
         // One colour only: its neighbour on the wheel, so the nebula still shimmers.
-        let accent = second?.color ?? rgb(h: fract(leadHue + 0.09), s: hsv(lead).s, v: 1)
+        let accent = second.map { hsv($0.color) }.map { rgb(h: $0.h, s: min(0.6, max($0.s, 0.4)), v: 0.6) }
+            ?? rgb(h: fract(leadHue + 0.06), s: leadSaturation, v: 0.6)
 
         // Dark orange and dark yellow read as brown: their shadows lean towards crimson instead.
         let warm = leadHue > 0.02 && leadHue < 0.17
         let deepHue = warm ? fract(leadHue - 0.07) : leadHue
-        return CoverPalette(deep: rgb(h: deepHue, s: 0.9, v: 0.22),
-                            vivid: lift(lead, saturation: 0.72, value: 0.95, maxValue: 1),
-                            accent: lift(accent, saturation: 0.62, value: 1, maxValue: 1))
+        return CoverPalette(deep: rgb(h: deepHue, s: 0.8, v: 0.14),
+                            vivid: rgb(h: leadHue, s: leadSaturation, v: 0.52),
+                            accent: accent)
     }
 
     private static func luma(_ c: SIMD3<Float>) -> Float { 0.299 * c.x + 0.587 * c.y + 0.114 * c.z }
 
     private static func fract(_ x: Float) -> Float { x - x.rounded(.down) }
-
-    /// At least this saturated and bright (grey covers still get some colour), at most `maxValue`.
-    private static func lift(_ c: SIMD3<Float>, saturation: Float, value: Float, maxValue: Float) -> SIMD3<Float> {
-        let (h, s, v) = hsv(c)
-        return rgb(h: h, s: max(s, saturation), v: min(max(v, value), maxValue))
-    }
 
     private static func hsv(_ c: SIMD3<Float>) -> (h: Float, s: Float, v: Float) {
         let maxC = max(c.x, c.y, c.z), minC = min(c.x, c.y, c.z)

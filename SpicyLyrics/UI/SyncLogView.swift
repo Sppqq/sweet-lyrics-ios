@@ -125,6 +125,9 @@ struct SyncIndicator: View {
                 Button(String(localized: "Проверить время")) { player.refreshNow() }
             } else {
                 Section {
+                    if let ping = player.spotifyPing {
+                        Text(String(localized: "Пинг до Spotify: \(Int((ping * 1000).rounded())) мс"))
+                    }
                     Text(String(localized: "Связь с приложением Spotify: \(settings.useAppRemote ? appRemote.statusText : String(localized: "Выключено"))"))
                     if let error = appRemote.lastError, appRemote.status != .connected, !appRemote.otherDeviceActive {
                         Text(error)

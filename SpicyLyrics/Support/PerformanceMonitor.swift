@@ -2,10 +2,13 @@ import Foundation
 import Observation
 
 /// Tells the UI to go easy on the GPU: when Low Power Mode is on or the phone is getting hot,
-/// lyrics drop to 30 fps, line blur turns off and the background stops moving.
+/// lyrics drop to 30 fps, line blur turns off and the background stops moving. Already when it
+/// is just warm, the lyrics drop to 30 fps so it does not get any hotter.
 @Observable
 final class PerformanceMonitor {
     private(set) var constrained = false
+    /// Warmer than normal (`.fair` or worse) or constrained: 30 fps is enough.
+    private(set) var warm = false
 
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
@@ -28,5 +31,7 @@ final class PerformanceMonitor {
         let hot = info.thermalState == .serious || info.thermalState == .critical
         let value = info.isLowPowerModeEnabled || hot
         if value != constrained { constrained = value }
+        let warmer = value || info.thermalState != .nominal
+        if warmer != warm { warm = warmer }
     }
 }

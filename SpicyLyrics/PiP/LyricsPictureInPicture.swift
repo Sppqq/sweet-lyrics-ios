@@ -234,7 +234,8 @@ final class LyricsPictureInPicture: NSObject {
                     animatorKey = (player.lyricsRevision, simple)
                 }
                 lyricsAnimator?.step(position: player.position(), now: MediaClock.now(),
-                                     blurEnabled: (settings?.blurInactiveLines ?? false) && !reduced)
+                                     blurEnabled: (settings?.blurInactiveLines ?? false) && !reduced,
+                                     frameInterval: framesPerSecond > 0 ? 1 / framesPerSecond : nil)
             } else {
                 lyricsAnimator = nil
                 animatorKey = nil
@@ -419,6 +420,8 @@ struct PiPStyle: Equatable {
     var weight: UIFont.Weight = .bold
     /// Spicy Lyrics' refined credits (see `RefinedCreditsView`).
     var refinedCredits = true
+    /// Duet Line Padding.
+    var duetPadding = true
 
     /// Same as the app's `LyricsTypography.opacity`.
     func opacity(_ value: Double) -> CGFloat {
@@ -484,6 +487,7 @@ struct PiPSnapshot: @unchecked Sendable {
             style.translationScale = CGFloat(settings.translationScale)
             style.weight = (LyricsWeight(rawValue: settings.lyricsWeight) ?? .bold).uiWeight
             style.refinedCredits = settings.refinedCredits
+            style.duetPadding = settings.duetLinePadding
             backgroundSaturation = settings.backgroundSaturation
         }
 
@@ -780,7 +784,7 @@ final class PiPFrameRenderer {
     private func buildRows(_ lyrics: PreparedLyrics, _ snapshot: PiPSnapshot, width column: CGFloat) {
         let style = snapshot.style
         let cqw = column / 100
-        let hasDuets = lyrics.lines.contains(where: \.oppositeAligned)
+        let hasDuets = style.duetPadding && lyrics.lines.contains(where: \.oppositeAligned)
         let size = leadSize
         let lead = ctFont(size, style.weight, style.design, family: style.family)
         let background = ctFont(size * 0.75, style.weight, style.design, family: style.family)
@@ -1109,6 +1113,7 @@ final class PiPFrameRenderer {
         let fade = CGFloat(style.simple ? 0.5 : 0.2)
         let gradient = fillGradient(alpha)
         var glows: [CGImage?]?
+        let shifts = reduceMotion ? nil : Self.growthShifts(row, visual)
         for (p, piece) in layout.pieces.enumerated() {
             guard masks.pieces.indices.contains(p), let mask = masks.pieces[p],
                   let drawn = Self.glyph(row.runs[piece.run], visual) else { continue }
@@ -1120,7 +1125,7 @@ final class PiPFrameRenderer {
 
             context.saveGState()
             context.setAlpha(opacity * CGFloat(glyph.opacity))
-            context.translateBy(x: glyphRect.midX, y: glyphRect.midY + lift)
+            context.translateBy(x: glyphRect.midX + (shifts?[p] ?? 0), y: glyphRect.midY + lift)
             context.scaleBy(x: scale, y: scale)
             context.translateBy(x: -glyphRect.midX, y: -glyphRect.midY)
 
@@ -1169,6 +1174,7 @@ final class PiPFrameRenderer {
         guard !UIAccessibility.isReduceMotionEnabled else { return }
         let layout = row.layout
         var glows: [CGImage?]?
+        let shifts = Self.growthShifts(row, visual)
         for (p, piece) in layout.pieces.enumerated() {
             guard let drawn = Self.glyph(row.runs[piece.run], visual) else { continue }
             let (glyph, kind) = drawn
@@ -1179,12 +1185,42 @@ final class PiPFrameRenderer {
             let rect = piece.glyphRect
             context.saveGState()
             context.setAlpha(opacity * CGFloat(glyph.opacity))
-            context.translateBy(x: rect.midX, y: rect.midY + CGFloat(glyph.yOffset) * row.fontSize)
+            context.translateBy(x: rect.midX + shifts[p], y: rect.midY + CGFloat(glyph.yOffset) * row.fontSize)
             context.scaleBy(x: CGFloat(glyph.scale), y: CGFloat(glyph.scale))
             context.translateBy(x: -rect.midX, y: -rect.midY)
             context.fill(mask: soft, in: layout.glowRect(piece), white: CGFloat(glow) * 1.6)
             context.restoreGState()
         }
+    }
+
+    /// Per piece: the shift that keeps the pieces of a word touching while each is scaled about
+    /// its own centre (`wordGrowthShifts`). A letter grows with its syllable.
+    private static func growthShifts(_ row: Row, _ visual: LineVisual) -> [CGFloat] {
+        let pieces = row.layout.pieces
+        var shifts = [CGFloat](repeating: 0, count: pieces.count)
+        var word: [Int] = []
+        func flush() {
+            defer { word = [] }
+            guard word.count > 1 else { return }
+            let growth = word.map { p -> CGFloat in
+                switch row.runs[pieces[p].run] {
+                case .syllable(let w, let s), .letter(let w, let s, _):
+                    return CGFloat(syllable(visual.lead, w, s)?.glyph.scale ?? 1)
+                default:
+                    return 1
+                }
+            }
+            let widths = word.map { pieces[$0].glyphRect.width }
+            for (k, shift) in wordGrowthShifts(widths: widths, growth: growth).enumerated() { shifts[word[k]] = shift }
+        }
+        for p in pieces.indices {
+            // Spaces have no pieces: neighbouring runs on one line are one word.
+            if let last = word.last, pieces[p].run != pieces[last].run + 1
+                || pieces[p].glyphRect.minY != pieces[last].glyphRect.minY { flush() }
+            word.append(p)
+        }
+        flush()
+        return shifts
     }
 
     private static func syllable(_ visuals: [[SyllableVisual]], _ w: Int, _ s: Int) -> SyllableVisual? {

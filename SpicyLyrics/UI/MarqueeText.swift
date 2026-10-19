@@ -7,6 +7,8 @@ struct MarqueeText: View {
     let font: Font
     /// Scroll only while the text can be seen (no animating an invisible header).
     var active = true
+    /// Text that fits sits in the middle instead of on the left (the external screen's title).
+    var centered = false
 
     private static let gap: CGFloat = 36
     private static let speed: CGFloat = 32 // points per second
@@ -29,7 +31,7 @@ struct MarqueeText: View {
             .hidden()
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { boxWidth = $0 }
-            .overlay(alignment: .leading) {
+            .overlay(alignment: centered && !overflows ? .center : .leading) {
                 HStack(spacing: Self.gap) {
                     label
                         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { textWidth = $0 }

@@ -31,3 +31,20 @@ CREATE TABLE IF NOT EXISTS messages (
   text        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS messages_report ON messages (report_id, id);
+-- Lyric translations shared by every install (/v1/translate). key: target + ":" + hash of the text.
+CREATE TABLE IF NOT EXISTS translations (
+  key         TEXT PRIMARY KEY,
+  target      TEXT NOT NULL,
+  text        TEXT NOT NULL,
+  translation TEXT NOT NULL,
+  created_at  INTEGER NOT NULL,
+  used_at     INTEGER NOT NULL             -- last asked for (refreshed weekly at most)
+);
+CREATE INDEX IF NOT EXISTS translations_used ON translations (used_at);
+-- Characters of uncached lines translated per network per hour.
+CREATE TABLE IF NOT EXISTS translate_quota (
+  ip_hash TEXT NOT NULL,
+  hour    INTEGER NOT NULL,                -- unix hours
+  chars   INTEGER NOT NULL,
+  PRIMARY KEY (ip_hash, hour)
+);

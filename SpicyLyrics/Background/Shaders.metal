@@ -136,6 +136,7 @@ struct VisualizerUniforms {
     float time;      // runs with the music, slows almost to a stop on pause
     float progress;  // 0…1 through the song
     float energy;    // 0 paused … 1 playing, eased
+    float stars;     // 1 with stars, 0 without
 };
 
 static float3 stars(float2 p, float time, float density) {
@@ -167,7 +168,7 @@ static float3 nebula(float2 p, constant VisualizerUniforms &u) {
     col += u.vivid * body * 1.15;
     col += u.accent * rim * 1.0;
     col += mix(u.vivid, float3(1.0), 0.12) * core * 0.5;
-    col += stars(p + float2(t * 0.05, 0.0), u.time, 38.0) * (1.0 - body);
+    if (u.stars > 0.5) col += stars(p + float2(t * 0.05, 0.0), u.time, 38.0) * (1.0 - body);
     return col;
 }
 

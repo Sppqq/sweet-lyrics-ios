@@ -3,10 +3,12 @@ import SwiftUI
 @main
 @MainActor
 struct SpicyLyricsApp: App {
+    /// Gives a TV on AirPlay screen mirroring (or a cable) its own full-screen lyrics.
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var settings: AppSettings
     @StateObject private var auth: SpotifyAuth
     @State private var player: PlayerModel
-    @State private var performance = PerformanceMonitor()
+    @State private var performance: PerformanceMonitor
     @State private var pip = LyricsPictureInPicture()
     @State private var appRemote: SpotifyAppRemote
     @State private var updates: UpdateChecker
@@ -24,6 +26,9 @@ struct SpicyLyricsApp: App {
         _auth = StateObject(wrappedValue: auth)
         let appRemote = SpotifyAppRemote(auth: auth, settings: settings)
         let player = PlayerModel(api: api, lyrics: lyrics, settings: settings, localLyrics: localLyrics)
+        let performance = PerformanceMonitor()
+        ExternalDisplay.shared.attach(settings: settings, player: player, performance: performance)
+        _performance = State(initialValue: performance)
         ReportService.shared.attach(settings: settings, player: player, appRemote: appRemote)
         _appRemote = State(initialValue: appRemote)
         _updates = State(initialValue: UpdateChecker(settings: settings))
@@ -47,6 +52,7 @@ struct SpicyLyricsApp: App {
 }
 
 struct RootView: View {
+    @ObservedObject private var externalDisplay = ExternalDisplay.shared
     @EnvironmentObject private var auth: SpotifyAuth
     @Environment(PlayerModel.self) private var player
     @Environment(AppSettings.self) private var settings
@@ -62,7 +68,19 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if sourceReady || isDemo {
+            if isExternalDisplayDemo {
+                #if DEBUG
+                // A 16:9 TV picture in the middle of the sideways phone.
+                ZStack {
+                    Color.black
+                    ExternalLyricsView()
+                        .aspectRatio(16 / 9, contentMode: .fit)
+                }
+                .ignoresSafeArea()
+                .statusBarHidden()
+                .persistentSystemOverlays(.hidden)
+                #endif
+            } else if sourceReady || isDemo {
                 NowPlayingView()
             } else {
                 OnboardingView()
@@ -88,6 +106,7 @@ struct RootView: View {
         }
         .onChange(of: settings.appleMusicOnboarded) { _, _ in updateActivity(scenePhase) }
         .onChange(of: settings.keepScreenOn) { _, _ in updateActivity(scenePhase) }
+        .onChange(of: externalDisplay.isConnected) { _, _ in updateActivity(scenePhase) }
         .onChange(of: pip.keepsAppRunning) { _, _ in updateActivity(scenePhase) }
         .onChange(of: settings.useAppRemote) { _, _ in appRemote.refresh() }
         .onChange(of: settings.syncLogEnabled) { _, enabled in SyncLog.shared.enabled = enabled }
@@ -135,6 +154,10 @@ struct RootView: View {
         #if DEBUG
         .task {
             if let demo = DemoTrack.current { player.startDemo(demo) }
+            if isExternalDisplayDemo,
+               let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+                scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight))
+            }
         }
         #endif
     }
@@ -183,6 +206,16 @@ struct RootView: View {
         settings.lastSeenVersion = current
     }
 
+    /// Debug: `-demoExternalDisplay YES` puts the external screen's view on the phone itself
+    /// (the Simulator's external display can't be attached from the command line).
+    private var isExternalDisplayDemo: Bool {
+        #if DEBUG
+        return isDemo && UserDefaults.standard.bool(forKey: "demoExternalDisplay")
+        #else
+        return false
+        #endif
+    }
+
     private var isDemo: Bool {
         #if DEBUG
         return DemoTrack.current != nil
@@ -202,7 +235,9 @@ struct RootView: View {
     }
 
     private func updateActivity(_ phase: ScenePhase) {
-        UIApplication.shared.isIdleTimerDisabled = phase == .active && sourceReady && settings.keepScreenOn
+        // A locked phone stops screen mirroring: keep it awake while the TV shows the lyrics.
+        UIApplication.shared.isIdleTimerDisabled = phase == .active && sourceReady
+            && (settings.keepScreenOn || externalDisplay.isConnected)
         if wantsToFollow(phase) {
             stopTask?.cancel()
             stopTask = nil

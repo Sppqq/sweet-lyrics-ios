@@ -292,6 +292,12 @@ final class LyricsService {
             let (data, response) = try await session.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard status == 200 else {
+                // The token may have just expired on Spotify's side: one more try on a fresh one,
+                // as the extension does since 6.3.
+                if status == 401, retry == 0 {
+                    token = try await auth.accessToken(forceRefresh: true)
+                    continue
+                }
                 if status == 401 || status == 403 { throw SpicyError.unauthorized }
                 throw SpicyError.http(status, Self.apiMessage(data))
             }
