@@ -439,14 +439,18 @@ struct LyricsDiskCache {
                 return nil
             }
             let config = RemoteConfig.current
-            let lifetime: TimeInterval = document.sourceName.hasPrefix("LRCLIB")
-                ? config.lrclibCacheHours * 3600 : config.lyricsCacheDays * 86_400
+            // Synced lyrics, from any source, are kept as long as the user chose.
+            let lifetime: TimeInterval = document.kind != .static
+                ? AppSettings.syncedLyricsCacheDaysStored * 86_400
+                : document.sourceName.hasPrefix("LRCLIB") ? config.lrclibCacheHours * 3600 : config.lyricsCacheDays * 86_400
             return age < lifetime ? .hit(document) : nil
         }
         return age < RemoteConfig.current.missCacheHours * 3600 ? .miss : nil
     }
 
-    private static var hitLifetime: TimeInterval { max(7, RemoteConfig.current.lyricsCacheDays) * 86_400 }
+    private static var hitLifetime: TimeInterval {
+        max(7, RemoteConfig.current.lyricsCacheDays, AppSettings.syncedLyricsCacheDaysStored) * 86_400
+    }
 
     /// Deletes entries nothing would read any more, so the cache does not grow forever.
     func prune() {

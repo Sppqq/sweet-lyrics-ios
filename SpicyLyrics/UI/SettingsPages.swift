@@ -168,6 +168,7 @@ enum SettingsIndex {
             String(localized: "Журнал"),
         ]) + on(.lyricsSources, [
             "Spicy Lyrics", String(localized: "Запасной источник LRCLIB"), String(localized: "Свои тексты (TTML)"),
+            String(localized: "Хранить синхронизированные тексты"),
             String(localized: "Перезагрузить текст"), String(localized: "Очистить кэш текстов"),
         ]) + on(.performance, [
             String(localized: "Экономия батареи"), String(localized: "Частота кадров текста"),

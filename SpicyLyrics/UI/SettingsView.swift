@@ -1088,6 +1088,16 @@ private struct SourceSettings: View {
             }
 
             Section {
+                Picker(String(localized: "Хранить синхронизированные тексты"), selection: $settings.syncedLyricsCacheDays) {
+                    ForEach([1.0, 3, 7, 14, 30], id: \.self) { days in
+                        Text(String(localized: "\(Int(days)) дн.")).tag(days)
+                    }
+                }
+            } footer: {
+                Text(String(localized: "Сколько дней текст с таймингами лежит на телефоне: пока он там, песня открывается сразу и без интернета. Дольше — меньше запросов, но правки синхронизации в Spicy Lyrics приходят позже."))
+            }
+
+            Section {
                 Button(String(localized: "Свои тексты (TTML)")) { showOwnLyrics = true }
                 Button(String(localized: "Перезагрузить текст")) { player.loadLyrics(force: true) }
                 Button(cacheCleared ? String(localized: "Кэш очищен") : String(localized: "Очистить кэш текстов")) {

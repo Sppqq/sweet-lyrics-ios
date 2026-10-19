@@ -216,6 +216,16 @@ final class AppSettings {
     /// A tap on a line lands 300 ms before it, so the player's fade-in after a seek
     /// doesn't swallow the first word (the extension's Seek Fade-in Compensation).
     var seekFadeCompensation: Bool { didSet { defaults.set(seekFadeCompensation, forKey: Keys.seekFadeCompensation) } }
+    /// Days synced lyrics stay in the cache (1…30): kept longer, a song played again is there at once.
+    var syncedLyricsCacheDays: Double {
+        didSet { defaults.set(syncedLyricsCacheDays, forKey: Keys.syncedLyricsCacheDays) }
+    }
+    static let syncedLyricsCacheRange: ClosedRange<Double> = 1...30
+    /// The same, read off the main thread by the lyrics cache.
+    nonisolated static var syncedLyricsCacheDaysStored: Double {
+        let stored = UserDefaults.standard.object(forKey: Keys.syncedLyricsCacheDays) as? Double ?? 7
+        return min(max(stored, syncedLyricsCacheRange.lowerBound), syncedLyricsCacheRange.upperBound)
+    }
     /// Smooth Scrolling: glide from line to line; off, the lyrics jump to the next line.
     var smoothScrolling: Bool { didSet { defaults.set(smoothScrolling, forKey: Keys.smoothScrolling) } }
     /// Duet Line Padding: each singer's lines lean toward their side, so duets read as two columns.
@@ -349,6 +359,7 @@ final class AppSettings {
             Keys.refinedCredits: true,
             Keys.joinSplitWords: false,
             Keys.smoothScrolling: true,
+            Keys.syncedLyricsCacheDays: 7.0,
             Keys.duetLinePadding: true,
             Keys.minimalLyricsMode: false,
             Keys.keepOverlappingLines: true,
@@ -444,6 +455,7 @@ final class AppSettings {
         refinedCredits = defaults.bool(forKey: Keys.refinedCredits)
         joinSplitWords = defaults.bool(forKey: Keys.joinSplitWords)
         smoothScrolling = defaults.bool(forKey: Keys.smoothScrolling)
+        syncedLyricsCacheDays = Self.syncedLyricsCacheDaysStored
         duetLinePadding = defaults.bool(forKey: Keys.duetLinePadding)
         minimalLyricsMode = defaults.bool(forKey: Keys.minimalLyricsMode)
         keepOverlappingLines = defaults.bool(forKey: Keys.keepOverlappingLines)
@@ -686,6 +698,7 @@ final class AppSettings {
         static let refinedCredits = "refinedCredits"
         static let joinSplitWords = "joinSplitWords"
         static let smoothScrolling = "smoothScrolling"
+        static let syncedLyricsCacheDays = "syncedLyricsCacheDays"
         static let duetLinePadding = "duetLinePadding"
         static let minimalLyricsMode = "minimalLyricsMode"
         static let keepOverlappingLines = "keepOverlappingLines"

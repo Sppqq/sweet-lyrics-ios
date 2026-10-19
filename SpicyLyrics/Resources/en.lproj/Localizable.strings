@@ -606,3 +606,6 @@
 "Слово, спетое по слогам, показывается одним словом, если слоги идут ровно. В дуэтах строки каждого исполнителя отступают к своей стороне, как две колонки." = "A word sung in syllables shows as one word when its parts line up evenly. In duets each singer's lines lean toward their side, like two columns.";
 "Спетые строки плавно исчезают, следующие ждут чуть меньше и тусклее (Minimal Lyrics Mode). Строка, которая кончилась, пока выше ещё поют (бэк-вокал, наложения), может остаться приглушённой." = "Sung lines fade away and the lines to come wait a little smaller and dimmer (Minimal Lyrics Mode). A line that ends while one above it is still sung (background vocals, overlaps) can stay, dimmed.";
 "Что приложение узнавало о песне и времени: пригодится, если текст отстаёт." = "What the app learned about the song and its time: useful when the lyrics lag.";
+"Хранить синхронизированные тексты" = "Keep Synced Lyrics";
+"%lld дн." = "%lld d";
+"Сколько дней текст с таймингами лежит на телефоне: пока он там, песня открывается сразу и без интернета. Дольше — меньше запросов, но правки синхронизации в Spicy Lyrics приходят позже." = "How many days lyrics with timings stay on the phone: while they are there, the song opens at once and offline. Longer means fewer requests, but sync fixes made in Spicy Lyrics arrive later.";
