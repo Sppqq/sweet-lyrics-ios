@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 import Combine
@@ -10,15 +11,18 @@ final class ExternalDisplay: ObservableObject {
     static let shared = ExternalDisplay()
 
     /// Some screen is showing the lyrics: the phone must not lock (that ends the mirroring).
-    var isConnected: Bool {
-        #if DEBUG
-        if UserDefaults.standard.bool(forKey: "demoTVConnected") { return true }
-        #endif
-        return connections > 0
-    }
+    var isConnected: Bool { connections > 0 || accessoryShown }
     @Published private var connections = 0
-    /// The connected screen's size in pixels, for the phone's TV panel.
-    @Published private(set) var screenPixels: CGSize?
+    /// iOS 27: the scene accessory's content is on a screen.
+    @Published private var accessoryShown = false
+
+    fileprivate func setAccessoryShown(_ shown: Bool) {
+        let wasConnected = isConnected
+        accessoryShown = shown
+        if !wasConnected && isConnected { settings?.tvPhoneLyrics = false }
+        if !isConnected { settings?.tvPhoneLyrics = false }
+        SyncLog.log("display", shown ? "external screen: lyrics shown (scene accessory)" : "external screen: lyrics gone (scene accessory)")
+    }
 
     @Published private(set) var settings: AppSettings?
     @Published private(set) var player: PlayerModel?
@@ -31,36 +35,85 @@ final class ExternalDisplay: ObservableObject {
         self.performance = performance
     }
 
+    @Published private(set) var screenPixels: CGSize?
+
     fileprivate func connected(_ screen: UIScreen) {
-        // The flag is persisted: if the app died while the lyrics were on the phone, it would
-        // still be set and hide the panel on the next TV.
-        if connections == 0 { settings?.tvPhoneLyrics = false }
+        if !isConnected { settings?.tvPhoneLyrics = false }
         connections += 1
         screenPixels = screen.nativeBounds.size
     }
-
     fileprivate func disconnected() {
         connections = max(0, connections - 1)
-        guard connections == 0 else { return }
-        screenPixels = nil
-        // The next TV starts with its settings on the phone again.
-        settings?.tvPhoneLyrics = false
+        if connections == 0 { screenPixels = nil }
+        if !isConnected { settings?.tvPhoneLyrics = false }
     }
 }
 
-/// Only to give the external screen its own scene; the app's window stays SwiftUI's.
+/// Only to give the external screen its own scene; the app's window stays SwiftUI's. The same
+/// scene is also declared in Info.plist (`UIApplicationSceneManifest`): without a manifest iOS
+/// never offered the app a scene for the TV and just mirrored the phone.
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        ExternalDisplay.startDiagnostics()
+        return true
+    }
+
     func application(_ application: UIApplication, configurationForConnecting session: UISceneSession,
                      options: UIScene.ConnectionOptions) -> UISceneConfiguration {
-        let configuration = UISceneConfiguration(name: nil, sessionRole: session.role)
-        if session.role == .windowExternalDisplayNonInteractive {
-            configuration.delegateClass = ExternalDisplaySceneDelegate.self
+        guard session.role == .windowExternalDisplayNonInteractive else {
+            return UISceneConfiguration(name: nil, sessionRole: session.role)
         }
+        SyncLog.log("display", "iOS asks for the external screen's scene")
+        let configuration = UISceneConfiguration(name: ExternalDisplaySceneDelegate.configurationName,
+                                                 sessionRole: session.role)
+        configuration.delegateClass = ExternalDisplaySceneDelegate.self
         return configuration
     }
 }
 
+extension ExternalDisplay {
+    /// For the log: which screens and scenes iOS reports, so a TV that shows a copy of the phone
+    /// instead of the lyrics can be told apart from one the app never heard of.
+    private static func logState(_ reason: String) {
+        let roles = UIApplication.shared.connectedScenes.map { $0.session.role.rawValue.replacingOccurrences(of: "UIWindowSceneSessionRole", with: "") }
+        let outputs = AVAudioSession.sharedInstance().currentRoute.outputs.map { $0.portType.rawValue }
+        SyncLog.log("display", "\(reason): \(UIScreen.screens.count) screen(s), scenes [\(roles.joined(separator: ", "))], audio \(outputs.joined(separator: ", "))")
+    }
+
+    static func startDiagnostics() {
+        let center = NotificationCenter.default
+        SyncLog.log("display", "screens at launch: \(UIScreen.screens.count)")
+        center.addObserver(forName: UIScreen.didConnectNotification, object: nil, queue: .main) { note in
+            let screen = note.object as? UIScreen
+            SyncLog.log("display", "screen connected \(screen.map { "\($0.bounds.size)" } ?? "?"), mirrored: \(screen?.mirrored != nil)")
+        }
+        center.addObserver(forName: UIScreen.didDisconnectNotification, object: nil, queue: .main) { _ in
+            SyncLog.log("display", "screen disconnected")
+        }
+        // Screen mirroring switches the audio to AirPlay too: what does iOS show the app then?
+        center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { _ in
+            logState("audio route changed")
+        }
+        center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { _ in
+            logState("app active")
+        }
+        center.addObserver(forName: UIScene.didDisconnectNotification, object: nil, queue: .main) { note in
+            guard let scene = note.object as? UIScene else { return }
+            SyncLog.log("display", "scene disconnected: \(scene.session.role.rawValue)")
+        }
+        center.addObserver(forName: UIScene.willConnectNotification, object: nil, queue: .main) { note in
+            guard let scene = note.object as? UIScene else { return }
+            SyncLog.log("display", "scene connecting: \(scene.session.role.rawValue), delegate \(scene.delegate.map { "\(type(of: $0))" } ?? "none")")
+        }
+    }
+}
+
+@objc(SLExternalDisplaySceneDelegate)
 final class ExternalDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
+    /// Matches `UISceneConfigurationName` in project.yml.
+    static let configurationName = "External Display"
+
     var window: UIWindow?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
@@ -80,6 +133,31 @@ final class ExternalDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
         window = nil
         ExternalDisplay.shared.disconnected()
         SyncLog.log("display", "external screen disconnected")
+    }
+}
+
+/// iOS 27 offers the external screen only to an app that registered a scene accessory for it
+/// ("Presenting content on a connected display"); before that the scene from Info.plist and
+/// `AppDelegate` is enough. Put on the app's root view. The SDK check keeps older Xcodes (CI)
+/// building.
+struct ExternalDisplayAccessory: ViewModifier {
+    func body(content: Content) -> some View {
+        #if compiler(>=6.4)
+        if #available(iOS 27.0, *) {
+            content.sceneAccessory {
+                ExternalNonInteractiveAccessory {
+                    ExternalDisplayRoot()
+                }
+                .onAvailabilityChange { available in
+                    ExternalDisplay.shared.setAccessoryShown(available)
+                }
+            }
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
     }
 }
 
@@ -158,7 +236,7 @@ struct ExternalLyricsView: View {
             if CoverVisualizer.isSupported {
                 CoverVisualizerView(player: player, reduced: reduced, dim: settings.tvBackgroundDim * 0.6,
                                     randomColors: settings.nebulaColors == NebulaColors.random.rawValue,
-                                    stars: settings.nebulaStars, maxFrameRate: 30)
+                                    maxFrameRate: 30)
                     .transition(.opacity)
             } else {
                 Color.black
@@ -193,8 +271,7 @@ struct ExternalLyricsView: View {
             horizontalPadding: padding, reduced: reduced,
             fontScale: size / CGFloat(AppSettings.defaultFontSize),
             tapSeeks: false,
-            clockOffset: settings.tvOffsetMs / 1000,
-            lowFrameRate: performance.warm
+            clockOffset: settings.tvOffsetMs / 1000
         )
         .id(player.lyricsRevision)
         .frame(width: width + padding * 2, height: layout.size.height)

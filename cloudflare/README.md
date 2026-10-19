@@ -50,6 +50,13 @@ never run it on a database made from the current `schema.sql` (the columns alrea
 npx wrangler d1 execute sweet-lyrics-reports --remote --file=migrations/0002_translations.sql
 ```
 
+After the first setup, GitHub Actions deploys the Worker (`.github/workflows/cloudflare-worker.yml`):
+pull requests that touch `cloudflare/` or `server/report-bot/` get a check (syntax, report bot tests,
+`wrangler deploy --dry-run`), and every such push to `main` is deployed. It needs two repository
+secrets: `CLOUDFLARE_API_TOKEN` (the "Edit Cloudflare Workers" template, with D1 and R2 edit added)
+and `CLOUDFLARE_ACCOUNT_ID`. Schema changes are not applied automatically: run them by hand before
+merging the Worker that needs them.
+
 ## Report bot
 
 Report processing runs on the private server through the Codex CLI in an isolated container. The

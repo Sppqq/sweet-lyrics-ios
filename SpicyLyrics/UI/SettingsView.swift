@@ -789,15 +789,25 @@ private struct MusicSourceSettings: View {
     var body: some View {
         @Bindable var settings = settings
         Form {
-            Section(String(localized: "Источник музыки")) {
-                Picker(String(localized: "Источник музыки"), selection: Binding(get: { settings.playbackSource }, set: {
+            Section {
+                Picker(String(localized: "Плеер"), selection: Binding(get: { settings.playerChoice }, set: {
                     if $0 == .appleMusic { settings.appleMusicOnboarded = true }
-                    settings.playbackSource = $0
+                    settings.playerChoice = $0
                 })) {
-                    ForEach(PlaybackSource.allCases) { Text($0.title).tag($0) }
+                    ForEach(PlayerChoice.allCases) { Text($0.title).tag($0) }
+                }
+                if settings.playerChoice == .automatic {
+                    LabeledContent(String(localized: "Сейчас"), value: settings.playbackSource.title)
+                }
+            } header: {
+                Text(String(localized: "Источник музыки"))
+            } footer: {
+                if settings.playerChoice == .automatic {
+                    Text(String(localized: "Текст идёт за тем плеером, который сейчас играет. Если играют оба, побеждает тот, что на этом телефоне. Для Apple Music нужен доступ к медиатеке, для Spotify — вход."))
                 }
             }
-            if settings.playbackSource == .spotify {
+            // With Apple Music in the picture its section below has the Spotify link too.
+            if settings.playerChoice == .spotify {
                 Section {
                     NavigationLink {
                         SpotifySettings()
@@ -810,7 +820,7 @@ private struct MusicSourceSettings: View {
                     }
                 }
             }
-            if settings.playbackSource == .appleMusic {
+            if settings.playerChoice != .spotify {
                 Section {
                     LabeledContent(String(localized: "Доступ к медиатеке"), value: authorizationText)
                     if player.appleMusic.authorization == .notDetermined {
@@ -855,7 +865,7 @@ private struct MusicSourceSettings: View {
                             Text("\(seconds) " + String(localized: "с")).tag(Double(seconds))
                         }
                     }
-                    if settings.playbackSource == .appleMusic {
+                    if settings.playerChoice != .spotify {
                         Toggle("AutoMix", isOn: $settings.appleMusicAutoMix)
                     }
                 }
@@ -865,7 +875,7 @@ private struct MusicSourceSettings: View {
             ResetSection(title: String(localized: "Сбросить настройки перехода")) { settings.resetPlaybackTransitions() }
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
-            if phase == .active, settings.playbackSource == .appleMusic { player.appleMusic.read() }
+            if phase == .active, settings.playerChoice != .spotify { player.appleMusic.read() }
         }
     }
 
@@ -891,7 +901,7 @@ private struct SyncSettings: View {
     var body: some View {
         @Bindable var settings = settings
         Form {
-            if settings.playbackSource == .spotify {
+            if settings.playerChoice != .appleMusic {
                 Section {
                     Toggle(String(localized: "Связь с приложением Spotify"), isOn: $settings.useAppRemote)
                     if settings.useAppRemote {
@@ -959,7 +969,7 @@ private struct SyncSettings: View {
             }
 
             Section {
-                if settings.playbackSource == .spotify {
+                if settings.playerChoice != .appleMusic {
                     SliderRow(title: String(localized: "Через интернет: раз в"), value: $settings.webPollInterval, range: 1...5,
                               step: 0.5, format: { String(format: "%.1f", $0) + " " + String(localized: "с") })
                     SliderRow(title: String(localized: "С приложением Spotify: раз в"), value: $settings.remoteQueryInterval,
@@ -969,7 +979,7 @@ private struct SyncSettings: View {
             } header: {
                 Text(String(localized: "Как часто сверять время"))
             } footer: {
-                if settings.playbackSource == .spotify {
+                if settings.playerChoice != .appleMusic {
                     Text(String(localized: "Чаще — точнее, но частые запросы через интернет расходуют общий лимит вашего Client ID. Значок над текстом показывает, откуда пришло время («приложение» или «интернет»), на сколько часы разошлись и как давно была сверка. Нажмите на него, чтобы проверить связь с приложением Spotify."))
                 }
             }
@@ -1068,7 +1078,7 @@ private struct SourceSettings: View {
                     }
                     Link(String(localized: "Получить ключ Spicy Lyrics"), destination: URL(string: "https://developers.spicylyrics.org")!)
                 }
-                if settings.playbackSource == .spotify {
+                if settings.playerChoice != .appleMusic {
                     Toggle(String(localized: "Запасной источник LRCLIB"), isOn: $settings.useLRCLibFallback)
                 }
             } header: {
@@ -1100,7 +1110,7 @@ private struct NoLyricsSettings: View {
     var body: some View {
         @Bindable var settings = settings
         Form {
-            if settings.playbackSource == .spotify {
+            if settings.playerChoice != .appleMusic {
                 Section {
                     Picker(String(localized: "Пропускать песни"), selection: $settings.autoSkipMode) {
                         ForEach(AutoSkipMode.allCases) { mode in

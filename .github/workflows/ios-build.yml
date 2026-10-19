@@ -124,7 +124,9 @@ jobs:
 
   build:
     needs: version
-    runs-on: macos-15
+    # Xcode 27 (iOS 27 SDK): the TV view on iOS 27 needs its scene accessory API, which older
+    # Xcodes compile out (#if compiler(>=6.4) in ExternalDisplay.swift). Preview image for now.
+    runs-on: xcode-27
     env:
       IPA: SpicyLyrics-${{ needs.version.outputs.version }}-unsigned.ipa
     steps:

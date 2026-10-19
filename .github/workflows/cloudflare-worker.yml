@@ -1,0 +1,68 @@
+name: Cloudflare Worker
+
+# pull_request  → check: syntax, report bot tests (they exercise the Worker), wrangler dry run.
+# push to main  → the same check, then deploy the Worker.
+# manual run    → deploy the current main.
+#
+# Needs repository secrets CLOUDFLARE_API_TOKEN (template "Edit Cloudflare Workers", plus D1 and
+# R2 edit for this account) and CLOUDFLARE_ACCOUNT_ID. D1 migrations are not applied here: run
+# them by hand (`npx wrangler d1 execute sweet-lyrics-reports --remote --file …`) before merging
+# a Worker that needs them.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cloudflare/**"
+      - "server/report-bot/**"
+      - ".github/workflows/cloudflare-worker.yml"
+  pull_request:
+    paths:
+      - "cloudflare/**"
+      - "server/report-bot/**"
+      - ".github/workflows/cloudflare-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Worker syntax
+        run: node --check cloudflare/src/index.js
+      - name: Report bot tests
+        working-directory: server/report-bot
+        run: python -m unittest -v test_report_bot
+      - name: Wrangler dry run
+        working-directory: cloudflare
+        run: npx --yes wrangler@4 deploy --dry-run --outdir "$RUNNER_TEMP/worker"
+
+  deploy:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # One deploy at a time; a newer main waits instead of racing the older one.
+    concurrency:
+      group: cloudflare-worker-deploy
+      cancel-in-progress: false
+    environment: cloudflare
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Deploy
+        working-directory: cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 deploy

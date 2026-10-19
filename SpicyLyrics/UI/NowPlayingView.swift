@@ -76,7 +76,6 @@ struct NowPlayingView: View {
                     imageID: player.artworkID,
                     artistImage: player.artistImage,
                     canvasURL: player.canvasURL,
-                    // A remote for the TV meanwhile: nothing needs to move on the phone.
                     animated: settings.dynamicBackground && !reduced && !tvMode,
                     playing: player.isPlaying,
                     dim: settings.backgroundDim,
@@ -166,7 +165,6 @@ struct NowPlayingView: View {
         .onChange(of: lyricsOnly) { _, value in
             if value { hideChrome() }
         }
-        // The TV panel needs the controls around it.
         .onChange(of: tvMode, initial: true) { _, value in
             if value { showChrome() }
         }
@@ -751,7 +749,9 @@ struct NowPlayingView: View {
         PlaybackBar(
             onInteraction: { showChrome() },
             onShowQueue: { if player.supportsSpotifyFeatures { showPicker = true } },
-            onToggleLyrics: { toggleArtworkMode() },
+            onToggleLyrics: {
+                withAnimation(.easeInOut(duration: 0.45)) { artworkMode.toggle() }
+            },
             lyricsShown: !bigArtworkShown,
             lyricsAvailable: lyricsAvailable,
             isVisible: chromeVisible,

@@ -482,6 +482,8 @@
 "Разработчик ответил на ваш отчёт" = "The Developer Answered Your Report";
 "Открыть" = "Open";
 "Источник музыки" = "Music Source";
+"Плеер" = "Player";
+"Текст идёт за тем плеером, который сейчас играет. Если играют оба, побеждает тот, что на этом телефоне. Для Apple Music нужен доступ к медиатеке, для Spotify — вход." = "The lyrics follow whichever player is playing. If both are, the one on this phone wins. Apple Music needs library access, Spotify needs you signed in.";
 "Пословные тексты для Spotify и Apple Music." = "Word-by-word lyrics for Spotify and Apple Music.";
 "Apple Music работает без Spotify Client ID. Разрешите доступ к медиатеке и включите песню в приложении «Музыка»." = "Apple Music works without a Spotify Client ID. Allow music library access and play a song in Music.";
 "Продолжить с Apple Music" = "Continue with Apple Music";
@@ -516,6 +518,11 @@
 "Пока не определено — дослушайте пару песен до конца" = "Not detected yet — let a couple of songs play through";
 "Сбросить определение" = "Reset Detection";
 "Авто оценивает переход по естественным сменам треков отдельно для Spotify и Apple Music. Вручную можно указать настройку музыкального приложения. Это не меняет звук." = "Automatic mode estimates transitions from natural track changes separately for Spotify and Apple Music. Manual mode lets you match your music app setting. This does not change audio.";
+"Spotify не может выполнить это действие для текущего трека или устройства." = "Spotify can't perform this action for the current track or device.";
+"Поставить звезду на GitHub" = "Star on GitHub";
+"Скрыть" = "Hide";
+"«Звезда на GitHub» в настройках" = "“Star on GitHub” in Settings";
+"Строка внизу главной страницы настроек. Её можно скрыть и свайпом влево." = "The row at the bottom of the main Settings page. You can also hide it by swiping left.";
 
 /* Lyrics on a TV: its settings on the phone */
 "Отмена" = "Cancel";
@@ -523,7 +530,7 @@
 "Сдвиг текста" = "Lyrics Offset";
 "Обложка и название" = "Artwork and Title";
 "Полоса времени" = "Timeline";
-"Текст на телефоне" = "Lyrics on Phone";
+"На телефон" = "On Phone";
 "Сбросить" = "Reset";
 "Текст на телевизоре" = "Lyrics on the TV";
 "Телефон теперь пульт" = "Your phone is the remote now";
@@ -532,10 +539,6 @@
 "Настройки телевизора" = "TV Settings";
 "Если текст на телевизоре отстаёт от музыки, сдвиньте вправо; если спешит — влево." = "If the lyrics on the TV lag behind the music, move it right; if they run early, move it left.";
 "Всё сохраняется и применится, когда телевизор подключится в следующий раз." = "Everything is saved and applies the next time the TV connects.";
-"Поставить звезду на GitHub" = "Star on GitHub";
-"Скрыть" = "Hide";
-"«Звезда на GitHub» в настройках" = "“Star on GitHub” in Settings";
-"Строка внизу главной страницы настроек. Её можно скрыть и свайпом влево." = "The row at the bottom of the main Settings page. You can also hide it by swiping left.";
 "Новый вид титров" = "Refined Credits";
 "Титры за последним исполнителем" = "Credits Follow the Last Singer";
 "Титры" = "Credits";
@@ -590,7 +593,6 @@
 "Отступ дуэтов" = "Duet Line Padding";
 "Анимация" = "Animation";
 "Когда нет текста" = "When There Are No Lyrics";
-"Плеер" = "Player";
 "Подключение" = "Connection";
 "Прочее" = "Other";
 "Тема и фон" = "Theme & Background";

@@ -8,12 +8,35 @@ enum PlaybackSource: String, CaseIterable, Identifiable, Hashable {
     var title: String { self == .spotify ? "Spotify" : "Apple Music" }
 }
 
+/// Which player the lyrics follow: whichever of the two is playing (the default), or always one.
+enum PlayerChoice: String, CaseIterable, Identifiable, Hashable {
+    case automatic = "auto", spotify, appleMusic
+    var id: String { rawValue }
+    var title: String { source?.title ?? String(localized: "Авто") }
+    /// The fixed player, nil for automatic.
+    var source: PlaybackSource? {
+        switch self {
+        case .automatic: return nil
+        case .spotify: return .spotify
+        case .appleMusic: return .appleMusic
+        }
+    }
+}
+
 /// User preferences, persisted in UserDefaults. The Spicy Lyrics key lives here too: it is a
 /// public client key (`sl_pk_…`), not a secret.
 @Observable
 final class AppSettings {
     private let defaults: UserDefaults
+    /// The player being followed right now. Fixed by `playerChoice`, or switched by
+    /// `AutoSourceSwitcher` when the choice is automatic (then it is the last one that played).
     var playbackSource: PlaybackSource { didSet { defaults.set(playbackSource.rawValue, forKey: Keys.playbackSource) } }
+    var playerChoice: PlayerChoice {
+        didSet {
+            defaults.set(playerChoice.rawValue, forKey: Keys.playerChoice)
+            if let source = playerChoice.source, playbackSource != source { playbackSource = source }
+        }
+    }
     var appleMusicOnboarded: Bool { didSet { defaults.set(appleMusicOnboarded, forKey: Keys.appleMusicOnboarded) } }
     var crossfadeSeconds: Double { didSet { defaults.set(crossfadeSeconds, forKey: Keys.crossfadeSeconds) } }
     var appleMusicAutoMix: Bool { didSet { defaults.set(appleMusicAutoMix, forKey: Keys.appleMusicAutoMix) } }
@@ -252,7 +275,10 @@ final class AppSettings {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        playbackSource = PlaybackSource(rawValue: defaults.string(forKey: Keys.playbackSource) ?? "") ?? .spotify
+        let choice = PlayerChoice(rawValue: defaults.string(forKey: Keys.playerChoice) ?? "") ?? .automatic
+        playerChoice = choice
+        playbackSource = choice.source
+            ?? PlaybackSource(rawValue: defaults.string(forKey: Keys.playbackSource) ?? "") ?? .spotify
         appleMusicOnboarded = defaults.bool(forKey: Keys.appleMusicOnboarded)
         crossfadeSeconds = min(12, max(0, defaults.double(forKey: Keys.crossfadeSeconds)))
         appleMusicAutoMix = defaults.bool(forKey: Keys.appleMusicAutoMix)
@@ -580,6 +606,7 @@ final class AppSettings {
 
     private enum Keys {
         static let playbackSource = "playbackSource"
+        static let playerChoice = "playerChoice"
         static let appleMusicOnboarded = "appleMusicOnboarded"
         static let crossfadeSeconds = "crossfadeSeconds"
         static let appleMusicAutoMix = "appleMusicAutoMix"
@@ -847,3 +874,5 @@ enum LyricsWeight: String, CaseIterable, Identifiable {
         }
     }
 }
+
+/// Where the nebula behind the big cover takes its colours from.

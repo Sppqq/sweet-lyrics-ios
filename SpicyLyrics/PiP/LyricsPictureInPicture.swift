@@ -405,8 +405,10 @@ enum PiPFormat: String, CaseIterable, Identifiable {
 /// How the app draws its lyrics, from the settings.
 struct PiPStyle: Equatable {
     var design: UIFontDescriptor.SystemDesign = .default
-    /// A font family (built into iOS or imported) instead of a system design.
+    /// A font family (built into iOS) instead of a system design.
     var family: String?
+    /// One imported face, by PostScript name.
+    var postScriptName: String?
     var simple = false
     var centered = false
     var glow: Double = 1
@@ -476,6 +478,7 @@ struct PiPSnapshot: @unchecked Sendable {
             let choice = LyricsFontChoice(stored: settings.lyricsFont)
             style.design = choice.uiDesign
             style.family = choice.family
+            style.postScriptName = choice.postScriptName
             style.simple = settings.simpleLyricsMode
             style.centered = settings.centerLyrics
             style.glow = settings.glowStrength
@@ -741,7 +744,7 @@ final class PiPFrameRenderer {
             let text = snapshot.message ?? ""
             if messageLayout?.text != text {
                 messageLayout = (text, PiPTextLayout(blocks: [PiPTextBlock(runs: [text],
-                                                                           font: ctFont(46, .bold, snapshot.style.design, family: snapshot.style.family))],
+                                                                           font: ctFont(46, .bold, snapshot.style.design, family: snapshot.style.family, face: snapshot.style.postScriptName))],
                                                      width: rect.width - inset * 2))
             }
             if let layout = messageLayout?.layout, let mask = layout.sharp.first {
@@ -786,9 +789,9 @@ final class PiPFrameRenderer {
         let cqw = column / 100
         let hasDuets = style.duetPadding && lyrics.lines.contains(where: \.oppositeAligned)
         let size = leadSize
-        let lead = ctFont(size, style.weight, style.design, family: style.family)
-        let background = ctFont(size * 0.75, style.weight, style.design, family: style.family)
-        let still = ctFont(size * 5 / 7, .medium, style.design, family: style.family)
+        let lead = ctFont(size, style.weight, style.design, family: style.family, face: style.postScriptName)
+        let background = ctFont(size * 0.75, style.weight, style.design, family: style.family, face: style.postScriptName)
+        let still = ctFont(size * 5 / 7, .medium, style.design, family: style.family, face: style.postScriptName)
 
         rows = lyrics.lines.map { line -> Row? in
             // `.line { padding-right: 5cqw }`, or 15cqw on the side a duet line leans away from.
@@ -849,7 +852,7 @@ final class PiPFrameRenderer {
             if let translation = snapshot.translations[line.sourceText], !translation.isEmpty {
                 // A backing vocal's translation is as much smaller as the vocal itself.
                 let translationSize = (line.isBackground ? size * 0.75 : size) * 0.55 * style.translationScale
-                blocks.append(PiPTextBlock(runs: [translation], font: ctFont(translationSize, .semibold, style.design, family: style.family),
+                blocks.append(PiPTextBlock(runs: [translation], font: ctFont(translationSize, .semibold, style.design, family: style.family, face: style.postScriptName),
                                            gray: line.isBackground ? 0.45 : 0.6, alignment: alignment,
                                            spacing: size * 0.1))
             }
@@ -1273,8 +1276,8 @@ final class PiPFrameRenderer {
     }
 
     private func ctFont(_ size: CGFloat, _ weight: UIFont.Weight, _ design: UIFontDescriptor.SystemDesign,
-                        family: String? = nil) -> CTFont {
-        let key = "\(size)|\(weight.rawValue)|\(design.rawValue)|\(family ?? "")"
+                        family: String? = nil, face: String? = nil) -> CTFont {
+        let key = "\(size)|\(weight.rawValue)|\(design.rawValue)|\(family ?? "")|\(face ?? "")"
         if let cached = fonts[key] { return cached as CTFont }
         let base = UIFont.systemFont(ofSize: size, weight: weight)
         var font = base.fontDescriptor.withDesign(design).map { UIFont(descriptor: $0, size: size) } ?? base
@@ -1284,6 +1287,8 @@ final class PiPFrameRenderer {
             let custom = UIFont(descriptor: descriptor, size: size)
             if custom.familyName == family { font = custom }
         }
+        // An imported face exactly as picked; gone (removed) -> the system font stays.
+        if let face, let custom = UIFont(name: face, size: size) { font = custom }
         fonts[key] = font
         return font as CTFont
     }

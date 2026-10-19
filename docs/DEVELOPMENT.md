@@ -27,14 +27,21 @@ These features work, but still need testing and refinement.
 | Gestures | Swipe the lyrics sideways to change tracks, pinch to resize, long-press a line to seek / copy / share (iOS 18+) |
 | iPad | Side-by-side layout in landscape (upright iPad uses the portrait layout: side by side the lyrics column was too narrow), larger lyrics, pointer hover, keyboard shortcuts (space, ⌘← / ⌘→) |
 | Floating lyrics (Picture in Picture) | The current line, word by word, in a PiP window over any app; wide, square, portrait or tall; opens out of the lyrics and closes back onto them; starts from *•••* or when leaving the app; play/pause and ±15 s from the window |
-| External display | AirPlay screen mirroring or a cable gets its own `windowExternalDisplayNonInteractive` scene (`ExternalDisplay.swift`) with the extension's full-screen page, sized from ContentBox.css: cover, title and timeline on the left, lyrics on the right, centred cover when there are no lyrics. The phone shows the TV's settings in place of its lyrics (`TVControlPanel.swift`: size, offset for the TV's picture delay, cover and timeline, background; saved), or its own lyrics on request, and doesn't lock meanwhile. Debug: `-demoExternalDisplay YES` shows that view on the phone, `-demoTVConnected YES` the phone's TV panel |
+| External display | AirPlay screen mirroring or a cable gets its own `windowExternalDisplayNonInteractive` scene (`ExternalDisplay.swift`) with the extension's full-screen page, sized from ContentBox.css: cover, title and timeline on the left, lyrics on the right, centred cover when there are no lyrics. The phone keeps its own UI and doesn't lock meanwhile. Debug: `-demoExternalDisplay YES` shows that view on the phone |
 | Romanization and translation | On-device: Japanese (with kanji readings), Chinese pinyin, Korean, Cyrillic, Greek; translation under or instead of each line, by the app's server (sweet.sppq.dev: Google behind a translation cache shared by every install, the default), Apple Translation on the device (iOS 18+), Google, Yandex or DeepL (your own key) |
 | Interface language | English and Russian; follows the phone's language (English otherwise), or pick one in *Settings → Interface* |
 | Display modes | Spicy Lyrics' Simple Lyrics Mode, centred lyrics, SF Pro / Rounded / New York |
 
 ## Apple Music and playback sources
 
-`PlaybackSource` in `AppSettings` selects Spotify (default) or Apple Music manually.
+`PlayerChoice` in `AppSettings` is the user's pick: Auto (default), Spotify or Apple Music.
+`PlaybackSource` is the player followed right now: fixed by a manual pick, or switched by
+`AutoSourceSwitcher` under Auto. It reads the Music system player once a second and takes
+over when Music has been playing (its position moving) for 1.5 s, unless Spotify still plays
+on this phone; while Apple Music is the source and silent it asks the Web API every 5 s and
+switches to Spotify when it plays on any device. Switches are at least 4 s apart, and a player
+that cannot be followed (signed out, no library access) gives way to the other one. A switch
+is just a change of `playbackSource`, handled like a manual one.
 `PlayerModel` routes sampling and transport controls; the Spotify clock and network path
 remain in use only in Spotify mode. Queue, history, search, App Remote and auto-skip are
 Spotify-only. Apple Music onboarding does not require a Spotify account or Client ID.

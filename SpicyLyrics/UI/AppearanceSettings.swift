@@ -42,8 +42,9 @@ struct FontSettings: View {
 
             Section {
                 ForEach(custom.imported) { font in
-                    ForEach(font.families, id: \.self) { name in
-                        row(title: name, stored: LyricsFontChoice.stored(family: name), family: name, design: nil)
+                    ForEach(font.faces) { face in
+                        row(title: face.displayName, stored: LyricsFontChoice.stored(face: face.postScriptName),
+                            family: face.family, design: nil)
                     }
                     .onDelete { _ in remove(font) }
                 }
@@ -65,9 +66,9 @@ struct FontSettings: View {
             switch result {
             case .success(let url):
                 do {
-                    let families = try custom.importFont(from: url)
+                    let faces = try custom.importFont(from: url)
                     message = nil
-                    if let first = families.first { settings.lyricsFont = LyricsFontChoice.stored(family: first) }
+                    if let first = faces.first { settings.lyricsFont = LyricsFontChoice.stored(face: first.postScriptName) }
                 } catch {
                     message = error.localizedDescription
                 }
@@ -99,7 +100,8 @@ struct FontSettings: View {
     }
 
     private func remove(_ font: CustomFonts.ImportedFont) {
-        if let current = LyricsFontChoice(stored: settings.lyricsFont).family, font.families.contains(current) {
+        let current = LyricsFontChoice(stored: settings.lyricsFont)
+        if font.faces.contains(where: { $0.postScriptName == current.postScriptName || $0.family == current.family }) {
             settings.lyricsFont = LyricsFont.standard.rawValue
         }
         custom.remove(font)

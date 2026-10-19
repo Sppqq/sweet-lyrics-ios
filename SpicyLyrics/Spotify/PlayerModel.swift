@@ -800,8 +800,12 @@ final class PlayerModel {
                 // really was. A pause made elsewhere (Spotify, the lock screen, headphones) counts
                 // too: it carries the exact position. Leaving pauses out kept the lead stuck at
                 // 635 ms while it really was ~260 ms (a report: lyrics late all song long).
+                // A slightly negative estimate can be timing noise around zero lead.
+                // Reject larger undershoots before clamping: a seek forward in Spotify
+                // must not be learned as zero lead and corrupt the saved estimate.
                 let observed = startLead - drift
-                if now >= holdUntil, (0...1.5).contains(observed) {
+                if now >= holdUntil, (-0.25...1.5).contains(observed) {
+                    let observed = max(0, observed)
                     startLead = (startLead + observed) / 2
                     leadNote = " (start lead \(observed.signedMs) → now \(startLead.signedMs))"
                 } else {
@@ -1068,7 +1072,7 @@ final class PlayerModel {
         endTransition()
         if playbackSource == .appleMusic { appleMusic.togglePlay(); return }
         let wasPlaying = isPlaying
-        control({ [weak self, api] in
+        control("play/pause", { [weak self, api] in
             if await self?.viaRemote(wasPlaying ? .pause : .play) == true { return }
             if wasPlaying { try await api.pause() } else { try await api.play() }
         }, optimistic: { [weak self] in
@@ -1081,7 +1085,7 @@ final class PlayerModel {
     func next() {
         manualTrackChange()
         if playbackSource == .appleMusic { appleMusic.next(); return }
-        control({ [weak self, api] in
+        control("next", { [weak self, api] in
             if await self?.viaRemote(.next) == true { return }
             try await api.next()
         })
@@ -1091,7 +1095,7 @@ final class PlayerModel {
         manualTrackChange()
         if playbackSource == .appleMusic { appleMusic.previous(); return }
         exemptNextSongUntil = MediaClock.now() + 5
-        control({ [weak self, api] in
+        control("previous", { [weak self, api] in
             if await self?.viaRemote(.previous) == true { return }
             try await api.previous()
         })
@@ -1113,7 +1117,7 @@ final class PlayerModel {
             appleMusic.seek(to: seconds)
             return
         }
-        control({ [weak self, api] in
+        control("seek", { [weak self, api] in
             if await self?.viaRemote(.seek(seconds)) == true { return }
             try await api.seek(to: seconds)
         }, optimistic: { [weak self] in
@@ -1143,7 +1147,7 @@ final class PlayerModel {
     func skipAhead(_ count: Int) {
         guard supportsSpotifyFeatures, count > 0 else { return }
         manualTrackChange()
-        control({ [weak self, api] in
+        control("skip ahead (\(count))", { [weak self, api] in
             for index in 0..<count {
                 if index > 0 { try await Task.sleep(for: .milliseconds(150)) }
                 if await self?.viaRemote(.next) == true { continue }
@@ -1171,7 +1175,7 @@ final class PlayerModel {
         manualTrackChange()
         skipExemptURI = track.uri
         let contexts = [context, track.albumURI].compactMap { $0 }.filter(Self.supportsOffset)
-        control({ [api] in
+        control("play selected track", { [api] in
             for contextURI in contexts {
                 do {
                     try await api.play(trackURI: track.uri, inContext: contextURI)
@@ -1219,7 +1223,7 @@ final class PlayerModel {
         uri.hasPrefix("spotify:album:") || uri.hasPrefix("spotify:playlist:")
     }
 
-    private func control(_ action: @escaping () async throws -> Void, optimistic: (() -> Void)? = nil) {
+    private func control(_ name: String, _ action: @escaping () async throws -> Void, optimistic: (() -> Void)? = nil) {
         guard supportsSpotifyFeatures else { return }
         let generation = sourceGeneration
         optimistic?()
@@ -1231,7 +1235,7 @@ final class PlayerModel {
                 try? await Task.sleep(for: .milliseconds(400))
             } catch {
                 guard generation == sourceGeneration else { return }
-                SyncLog.shared.add("control", "failed: \(error.localizedDescription)")
+                SyncLog.shared.add("control", "\(name) failed: \(error.localizedDescription)")
                 transientError = error.localizedDescription
             }
             guard generation == sourceGeneration else { return }

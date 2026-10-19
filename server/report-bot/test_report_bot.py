@@ -396,14 +396,14 @@ class ReportBotTests(unittest.TestCase):
         # Run the real Worker route, capture its D1 batch, then execute that exact SQL
         # in SQLite. The user arrives after the route's initial SELECT, in the same second.
         script = r'''
-import {readFileSync} from 'node:fs';
+import {pathToFileURL} from 'node:url';
 import {webcrypto, timingSafeEqual} from 'node:crypto';
 // Cloudflare's extension is absent from Node's Web Crypto API.
 webcrypto.subtle.timingSafeEqual = (a, b) => timingSafeEqual(Buffer.from(a), Buffer.from(b));
 Object.defineProperty(globalThis, 'crypto', {value: webcrypto});
 console.error = error => process.stderr.write(String(error) + '\n');
-const code = readFileSync(process.argv[1], 'utf8');
-const worker = (await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'))).default;
+// From its own path, so its imports of sibling modules (translate.js) resolve.
+const worker = (await import(pathToFileURL(process.argv[1]).href)).default;
 const expected = Number(process.argv[2]), actual = 1, endpoint = process.argv[3];
 let batch;
 const DB = {

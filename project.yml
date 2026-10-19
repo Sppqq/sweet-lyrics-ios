@@ -77,6 +77,15 @@ targets:
           - CFBundleURLName: com.spicylyrics.unofficial.ios.auth
             CFBundleURLSchemes:
               - spicylyrics-ios
+        # A scene of its own for a TV on AirPlay screen mirroring or a cable (ExternalDisplay.swift).
+        # The app's own window stays SwiftUI's and needs no entry here. Multiple scenes must be on:
+        # with them off (0.6.5 build 241) iOS never offered the external screen and just mirrored.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleExternalDisplayNonInteractive:
+              - UISceneConfigurationName: External Display
+                UISceneDelegateClassName: SLExternalDisplaySceneDelegate
         LSApplicationQueriesSchemes:
           - spotify
           - music

@@ -57,6 +57,7 @@ struct PlaybackSnapshot {
 enum SpotifyAPIError: LocalizedError {
     case premiumRequired
     case noActiveDevice
+    case restrictedAction
     case rateLimited(retryAfter: Double)
     /// The shared quota of the Client ID ran out (HTTP 429 `QUOTA_EXCEEDED`).
     case quotaExceeded(retryAfter: Double)
@@ -70,6 +71,7 @@ enum SpotifyAPIError: LocalizedError {
         switch self {
         case .premiumRequired: return String(localized: "Управление воспроизведением через Web API доступно только с Spotify Premium.")
         case .noActiveDevice: return String(localized: "Нет активного устройства Spotify. Включите музыку в приложении Spotify.")
+        case .restrictedAction: return String(localized: "Spotify не может выполнить это действие для текущего трека или устройства.")
         case .rateLimited: return String(localized: "Spotify временно ограничил запросы, повторим позже.")
         case .quotaExceeded:
             return String(localized: "У вашего Client ID закончился лимит запросов Spotify. Подождите немного.")
@@ -289,6 +291,8 @@ final class SpotifyAPI {
         switch status {
         case 403 where message.lowercased().contains("premium") || error?.reason == "PREMIUM_REQUIRED":
             throw SpotifyAPIError.premiumRequired
+        case 403 where message.localizedCaseInsensitiveContains("Restriction violated"):
+            throw SpotifyAPIError.restrictedAction
         // "Check settings on developer.spotify.com/dashboard, the user may not be registered."
         case 403 where message.lowercased().contains("registered") || message.lowercased().contains("dashboard"):
             throw SpotifyAPIError.userNotRegistered

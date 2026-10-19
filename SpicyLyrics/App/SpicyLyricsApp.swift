@@ -12,6 +12,7 @@ struct SpicyLyricsApp: App {
     @State private var pip = LyricsPictureInPicture()
     @State private var appRemote: SpotifyAppRemote
     @State private var updates: UpdateChecker
+    @State private var sourceSwitcher: AutoSourceSwitcher
 
     init() {
         AudioRoute.prepare()
@@ -32,12 +33,13 @@ struct SpicyLyricsApp: App {
         ReportService.shared.attach(settings: settings, player: player, appRemote: appRemote)
         _appRemote = State(initialValue: appRemote)
         _updates = State(initialValue: UpdateChecker(settings: settings))
+        _sourceSwitcher = State(initialValue: AutoSourceSwitcher(settings: settings, auth: auth, api: api))
         _player = State(initialValue: player)
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView(sourceSwitcher: sourceSwitcher)
                 .environment(settings)
                 .environment(player)
                 .environment(performance)
@@ -53,6 +55,8 @@ struct SpicyLyricsApp: App {
 
 struct RootView: View {
     @ObservedObject private var externalDisplay = ExternalDisplay.shared
+    /// Follows whichever player is playing when the player choice is "Auto".
+    let sourceSwitcher: AutoSourceSwitcher
     @EnvironmentObject private var auth: SpotifyAuth
     @Environment(PlayerModel.self) private var player
     @Environment(AppSettings.self) private var settings
@@ -86,6 +90,8 @@ struct RootView: View {
                 OnboardingView()
             }
         }
+        // The TV on screen mirroring (iOS 27 needs this to offer the screen at all).
+        .modifier(ExternalDisplayAccessory())
         .onChange(of: scenePhase, initial: true) { old, phase in
             updateActivity(phase)
             // Back in the app: the lyrics on screen were last drawn a while ago.
@@ -104,6 +110,7 @@ struct RootView: View {
             player.sourceChanged()
             updateActivity(scenePhase)
         }
+        .onChange(of: settings.playerChoice) { _, _ in updateActivity(scenePhase) }
         .onChange(of: settings.appleMusicOnboarded) { _, _ in updateActivity(scenePhase) }
         .onChange(of: settings.keepScreenOn) { _, _ in updateActivity(scenePhase) }
         .onChange(of: externalDisplay.isConnected) { _, _ in updateActivity(scenePhase) }
@@ -231,7 +238,9 @@ struct RootView: View {
     }
 
     private var sourceReady: Bool {
-        settings.playbackSource == .appleMusic ? settings.appleMusicOnboarded : auth.isLoggedIn
+        // Read here so SwiftUI notices sign-in changes; the switcher knows which player counts.
+        _ = auth.isLoggedIn
+        return sourceSwitcher.anySourceReady
     }
 
     private func updateActivity(_ phase: ScenePhase) {
@@ -241,8 +250,10 @@ struct RootView: View {
         if wantsToFollow(phase) {
             stopTask?.cancel()
             stopTask = nil
+            sourceSwitcher.preferReadySource()
             player.startPolling()
             if settings.playbackSource == .spotify, settings.useAppRemote { appRemote.start(player: player) }
+            sourceSwitcher.start(player: player)
             return
         }
         guard sourceReady else {
@@ -267,5 +278,6 @@ struct RootView: View {
         stopTask = nil
         player.stopPolling()
         appRemote.stop()
+        sourceSwitcher.stop()
     }
 }
