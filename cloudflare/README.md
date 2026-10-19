@@ -10,6 +10,10 @@ status change (nightly cron), so a thread still being talked in stays.
 - `GET /v1/threads`, `POST /v1/threads/{id}/messages`: the sender's side, header `X-Install-Id`.
 - `/v1/bot/…` (`inbox`, `report/{id}`, `reply`, `status`): private report processing, `Authorization: Bearer
   $BOT_TOKEN`. The scheduled processor runs on the server; see [`server/report-bot`](../server/report-bot/README.md).
+- `GET /v1/config`: the app's remote config (`RemoteConfig.swift`): lyrics timeout, queue look-ahead, cache
+  lifetimes, a floor for Web API polling, and kill switches for auto reports and Canvas. The defaults live in
+  `CLIENT_CONFIG` in `src/index.js`; to change them for every install without a release, set the `CLIENT_CONFIG`
+  variable to JSON (merged over them), e.g. `{"minWebPollInterval": 5, "lookaheadDepth": 0}`.
 - `/admin`: the list, a report with its photos and log, answer, set the status, delete. HTTP Basic: any user name, the password
   is the `ADMIN_TOKEN` secret.
 

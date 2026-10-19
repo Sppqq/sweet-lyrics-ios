@@ -32,7 +32,7 @@ final class LyricsService {
         spotify = SpotifyAPI(auth: auth)
         spotifyMatches = UserDefaults.standard.dictionary(forKey: Self.matchesKey) as? [String: String] ?? [:]
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 15
+        config.timeoutIntervalForRequest = RemoteConfig.shared.values.lyricsTimeout
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         session = URLSession(configuration: config)
         let cache = cache
@@ -432,13 +432,15 @@ struct LyricsDiskCache {
                 try? FileManager.default.removeItem(at: file(id))
                 return nil
             }
-            let lifetime: TimeInterval = document.sourceName.hasPrefix("LRCLIB") ? 86_400 : Self.hitLifetime
+            let config = RemoteConfig.current
+            let lifetime: TimeInterval = document.sourceName.hasPrefix("LRCLIB")
+                ? config.lrclibCacheHours * 3600 : config.lyricsCacheDays * 86_400
             return age < lifetime ? .hit(document) : nil
         }
-        return age < 86_400 ? .miss : nil
+        return age < RemoteConfig.current.missCacheHours * 3600 ? .miss : nil
     }
 
-    private static let hitLifetime: TimeInterval = 7 * 86_400
+    private static var hitLifetime: TimeInterval { max(7, RemoteConfig.current.lyricsCacheDays) * 86_400 }
 
     /// Deletes entries nothing would read any more, so the cache does not grow forever.
     func prune() {

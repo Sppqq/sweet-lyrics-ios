@@ -1022,7 +1022,7 @@ final class PlayerModel {
             let remaining = duration - playbackPosition()
             if remaining > 0, remaining < 2 { return max(0.5, remaining + 0.3) }
         }
-        return settings.webPollInterval
+        return max(settings.webPollInterval, RemoteConfig.shared.values.minWebPollInterval)
     }
 
     func refreshNow() {
@@ -1303,10 +1303,12 @@ final class PlayerModel {
         #endif
         guard let current = track, pollTask != nil else { return }
         let skipping = AutoSkipMode(rawValue: settings.autoSkipMode).map { $0 != .off } ?? false
-        let depth = skipping ? 6 : 2
+        let config = RemoteConfig.shared.values
+        let depth = skipping ? config.lookaheadDepthSkipping : config.lookaheadDepth
+        guard depth > 0 else { return }
         lookaheadTask = Task { [weak self] in
             // The playing song's own requests go first.
-            try? await Task.sleep(for: .seconds(1.5))
+            try? await Task.sleep(for: .seconds(config.lookaheadDelay))
             guard let self, !Task.isCancelled, self.track?.uri == current.uri,
                   let queue = try? await self.api.queue() else { return }
             let upcoming = queue.prefix(depth).compactMap(Self.trackInfo)
@@ -1374,7 +1376,8 @@ final class PlayerModel {
     /// once per track (and remembered), in the background; until then the cover shows.
     func loadBackgroundVisuals() {
         let style = settings.background
-        guard settings.dynamicBackground, supportsSpotifyFeatures, style == .artist || style == .canvas,
+        guard settings.dynamicBackground, supportsSpotifyFeatures,
+              style == .artist || (style == .canvas && RemoteConfig.shared.values.canvas),
               case .track(let info) = content, !info.isLocal, !info.id.hasPrefix("am:")
         else {
             visualsTask?.cancel()

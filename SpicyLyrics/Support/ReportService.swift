@@ -211,7 +211,7 @@ final class ReportService {
     /// Every `SyncLog` entry passes here; a failure the user agreed to report is sent after a
     /// short delay, at most once per kind per launch, one every five minutes and five a day.
     func noteError(source: String, message: String) {
-        guard let settings, settings.reportConsent == 1, pending == nil,
+        guard let settings, settings.reportConsent == 1, pending == nil, RemoteConfig.shared.values.autoReports,
               Self.isReportable(source, message) else { return }
         let key = source + ":" + message.prefix(40)
         guard !reported.contains(key), Date().timeIntervalSince(lastAutoAt) > Self.autoGap else { return }

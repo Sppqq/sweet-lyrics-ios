@@ -3,6 +3,7 @@
 // works through reports, /v1/bot) answers, the app shows the answers and lets the sender reply.
 // Status: open → in_progress → closed; a reply from the sender reopens a closed report.
 // /admin is a small page for reading, answering and closing them.
+// /v1/config serves the app's request cadence, timeouts and cache lifetimes (RemoteConfig.swift).
 
 const MAX_BODY = 8 * 1024 * 1024;
 const MAX_LOG = 300_000;
@@ -20,12 +21,28 @@ const MAX_REPLY = 4_000;
 const RECHECK_DAYS = 2;
 // Replies from one install per hour.
 const MESSAGES_PER_HOUR = 20;
+// What /v1/config serves. These match the app's compiled defaults; to change them for every
+// install without a release, set the CLIENT_CONFIG variable (JSON, merged over these), e.g.
+// `{"minWebPollInterval": 5, "lookaheadDepth": 0}` while Spotify or the lyrics API struggle.
+const CLIENT_CONFIG = {
+  lyricsTimeout: 15,
+  lookaheadDepth: 2,
+  lookaheadDepthSkipping: 6,
+  lookaheadDelay: 1.5,
+  lyricsCacheDays: 7,
+  missCacheHours: 24,
+  lrclibCacheHours: 24,
+  minWebPollInterval: 0,
+  autoReports: true,
+  canvas: true,
+};
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     try {
       if (url.pathname === "/v1/report" && request.method === "POST") return await receive(request, env);
+      if (url.pathname === "/v1/config" && request.method === "GET") return clientConfig(env);
       if (url.pathname.startsWith("/v1/threads")) return await threads(request, env, url);
       if (url.pathname.startsWith("/v1/bot/")) return await bot(request, env, url);
       if (url.pathname === "/") return text("Sweet Lyrics reports\n");
@@ -52,6 +69,21 @@ export default {
     }
   },
 };
+
+// The app's remote config: the defaults with CLIENT_CONFIG's keys over them. A broken variable
+// is ignored rather than taking the endpoint down; the app checks every key on its own anyway.
+function clientConfig(env) {
+  let overrides = {};
+  try {
+    overrides = env.CLIENT_CONFIG ? JSON.parse(env.CLIENT_CONFIG) : {};
+  } catch (error) {
+    console.error("CLIENT_CONFIG is not JSON", error);
+  }
+  const body = { ...CLIENT_CONFIG, ...(overrides && typeof overrides === "object" ? overrides : {}) };
+  return new Response(JSON.stringify(body), {
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" },
+  });
+}
 
 // MARK: Receiving
 
