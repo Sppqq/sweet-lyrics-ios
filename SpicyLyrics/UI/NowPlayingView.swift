@@ -62,6 +62,8 @@ struct NowPlayingView: View {
                 DynamicBackground(
                     image: settings.dynamicBackground ? player.backgroundArtwork : nil,
                     imageID: player.artworkID,
+                    artistImage: player.artistImage,
+                    canvasURL: player.canvasURL,
                     animated: settings.dynamicBackground && !reduced,
                     playing: player.isPlaying,
                     dim: settings.backgroundDim,
@@ -184,6 +186,8 @@ struct NowPlayingView: View {
         .onChange(of: settings.showRomanization) { _, _ in player.settingsChanged() }
         .onChange(of: settings.simpleLyricsMode) { _, _ in player.settingsChanged() }
         .onChange(of: settings.joinSplitWords) { _, _ in player.settingsChanged() }
+        .onChange(of: settings.backgroundStyle) { _, _ in player.loadBackgroundVisuals() }
+        .onChange(of: settings.dynamicBackground) { _, _ in player.loadBackgroundVisuals() }
         .onChange(of: settings.minimalLyricsMode) { _, _ in player.settingsChanged() }
         .onChange(of: settings.refreshedSimpleLyrics) { _, _ in player.settingsChanged() }
         .onChange(of: settings.translationReplaces) { _, _ in player.settingsChanged() }

@@ -108,6 +108,11 @@ final class SpotifyAPI {
         session = Self.makeSession()
     }
 
+    /// A GET with the usual retries, for the endpoints kept in other files (`SpotifyVisuals`).
+    func get(_ path: String) async throws -> (Data, Int) { try await send("GET", path) }
+
+    func accessToken() async throws -> String { try await auth.accessToken() }
+
     private static func makeSession() -> URLSession {
         let config = URLSessionConfiguration.default
         config.requestCachePolicy = .reloadIgnoringLocalCacheData

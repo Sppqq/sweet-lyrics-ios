@@ -12,6 +12,10 @@ import UIKit
 struct DynamicBackground: View {
     let image: UIImage?
     let imageID: String
+    /// The artist's photo for the "Фото артиста" style, once it has loaded.
+    var artistImage: UIImage? = nil
+    /// The song's Canvas for the "Canvas" style, when it has one.
+    var canvasURL: URL? = nil
     let animated: Bool
     /// The flow slows to a tenth while the song is paused.
     var playing = true
@@ -36,17 +40,45 @@ struct DynamicBackground: View {
         }
     }
 
+    private var style: BackgroundStyle { settings.background }
+
+    /// The cover keeps flowing under the other styles until their picture is there.
+    private var coverMoves: Bool { animated && style != .cover }
+
+    /// A video needs more darkening than a blurred cover for white text to read on it.
+    private var canvasShown: Bool { style == .canvas && canvasURL != nil && image != nil }
+
     private var coverBackground: some View {
         ZStack {
             Color(red: 0.07, green: 0.07, blue: 0.08)
             if KawarpBackground.isSupported {
-                KawarpBackground(image: image, imageID: imageID, animated: animated, playing: playing,
+                KawarpBackground(image: image, imageID: imageID, animated: coverMoves, playing: playing,
                                  speed: speed, blur: blur, saturation: saturation)
             } else {
-                CoverBlobs(image: image, imageID: imageID, animated: animated, speed: speed, blur: blur, saturation: saturation)
+                CoverBlobs(image: image, imageID: imageID, animated: coverMoves, speed: speed, blur: blur, saturation: saturation)
             }
-            Color.black.opacity(dim)
+            if style == .artist, let artistImage, image != nil {
+                // `Image Blur`: the photo stays recognisable, just soft.
+                Color.clear
+                    .overlay {
+                        Image(uiImage: artistImage)
+                            .resizable()
+                            .scaledToFill()
+                            .blur(radius: 18 * blur, opaque: true)
+                            .saturation(saturation)
+                    }
+                    .clipped()
+                    .transition(.opacity)
+            }
+            if canvasShown, let canvasURL {
+                CanvasVideoView(url: canvasURL, playing: playing)
+                    .saturation(saturation)
+                    .transition(.opacity)
+            }
+            Color.black.opacity(canvasShown ? min(0.85, dim + 0.15) : dim)
         }
+        .animation(.easeInOut(duration: 0.8), value: artistImage)
+        .animation(.easeInOut(duration: 0.8), value: canvasURL)
         .ignoresSafeArea()
         .allowsHitTesting(false)
     }

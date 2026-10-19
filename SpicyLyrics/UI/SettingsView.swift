@@ -400,7 +400,9 @@ private struct BackgroundSettings: View {
                 }
 
                 Section(String(localized: "Обложка")) {
-                    SliderRow(title: String(localized: "Скорость движения"), value: $settings.backgroundSpeed, range: 0.25...3)
+                    if settings.background != .cover {
+                        SliderRow(title: String(localized: "Скорость движения"), value: $settings.backgroundSpeed, range: 0.25...3)
+                    }
                     SliderRow(title: String(localized: "Размытие"), value: $settings.backgroundBlur, range: 0.3...3)
                     SliderRow(title: String(localized: "Насыщенность цвета"), value: $settings.backgroundSaturation, range: 0...2)
                 }

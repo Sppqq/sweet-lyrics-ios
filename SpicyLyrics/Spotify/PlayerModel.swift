@@ -25,6 +25,15 @@ final class PlayerModel {
     /// Small copy of the artwork for the animated background.
     private(set) var backgroundArtwork: UIImage?
     private(set) var artworkID = ""
+    /// The first artist's photo, for the "Фото артиста" background (Spotify only).
+    private(set) var artistImage: UIImage?
+    /// The song's Canvas loop, for the "Canvas" background (Spotify only).
+    private(set) var canvasURL: URL?
+    @ObservationIgnored private var visualsTask: Task<Void, Never>?
+    /// Style and track the background visuals were loaded for.
+    @ObservationIgnored private var visualsKey = ""
+    @ObservationIgnored private var artistImages: [String: UIImage] = [:]
+    @ObservationIgnored private var canvasURLs: [String: URL?] = [:]
     /// Bumped whenever new lyrics are shown, so the lyrics view starts fresh.
     private(set) var lyricsRevision = 0
     private var currentLyricsState: LyricsState = .idle
@@ -1358,6 +1367,71 @@ final class PlayerModel {
             lyricsState = .idle
         }
         loadArtwork()
+        loadBackgroundVisuals()
+    }
+
+    /// The artist's photo or the Canvas when the background style asks for one. Each is looked up
+    /// once per track (and remembered), in the background; until then the cover shows.
+    func loadBackgroundVisuals() {
+        let style = settings.background
+        guard settings.dynamicBackground, supportsSpotifyFeatures, style == .artist || style == .canvas,
+              case .track(let info) = content, !info.isLocal, !info.id.hasPrefix("am:")
+        else {
+            visualsTask?.cancel()
+            visualsKey = ""
+            if artistImage != nil { artistImage = nil }
+            if canvasURL != nil { canvasURL = nil }
+            return
+        }
+        let key = style.rawValue + "|" + info.id
+        guard key != visualsKey else { return }
+        visualsKey = key
+        visualsTask?.cancel()
+        let trackID = info.id, uri = info.uri
+        switch style {
+        case .artist:
+            if canvasURL != nil { canvasURL = nil }
+            if let cached = artistImages[trackID] {
+                artistImage = cached
+                return
+            }
+            artistImage = nil
+            visualsTask = Task { [weak self] in
+                guard let self else { return }
+                guard let url = try? await self.api.artistImageURL(trackID: trackID),
+                      let data = try? await URLSession.shared.data(from: url).0,
+                      let image = UIImage(data: data)?.downscaled(to: 720),
+                      !Task.isCancelled, self.visualsKey == key
+                else { return }
+                if self.artistImages.count > 40 { self.artistImages.removeAll() }
+                self.artistImages[trackID] = image
+                self.artistImage = image
+            }
+        case .canvas:
+            if artistImage != nil { artistImage = nil }
+            if let cached = canvasURLs[trackID] {
+                canvasURL = cached
+                return
+            }
+            canvasURL = nil
+            visualsTask = Task { [weak self] in
+                guard let self else { return }
+                let url: URL?
+                do {
+                    url = try await self.api.canvasURL(trackURI: uri)
+                } catch {
+                    SyncLog.log("canvas", "failed: \(error.localizedDescription)")
+                    return
+                }
+                guard !Task.isCancelled, self.visualsKey == key else { return }
+                if self.canvasURLs.count > 100 { self.canvasURLs.removeAll() }
+                self.canvasURLs[trackID] = url
+                self.canvasURL = url
+                SyncLog.log("canvas", url == nil ? "none for this song" : "found")
+            }
+        case .dynamic, .cover:
+            break
+        }
     }
 
     func loadLyrics(force: Bool) {
