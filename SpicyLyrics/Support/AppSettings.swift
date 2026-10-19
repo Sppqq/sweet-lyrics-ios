@@ -176,6 +176,19 @@ final class AppSettings {
     /// A tap on a line lands 300 ms before it, so the player's fade-in after a seek
     /// doesn't swallow the first word (the extension's Seek Fade-in Compensation).
     var seekFadeCompensation: Bool { didSet { defaults.set(seekFadeCompensation, forKey: Keys.seekFadeCompensation) } }
+    /// Join Split Words: a word sung in evenly paced parts is shown and filled as one word.
+    var joinSplitWords: Bool { didSet { defaults.set(joinSplitWords, forKey: Keys.joinSplitWords) } }
+    /// Minimal Lyrics Mode: lines fade out once sung, lines to come wait a little smaller.
+    var minimalLyricsMode: Bool { didSet { defaults.set(minimalLyricsMode, forKey: Keys.minimalLyricsMode) } }
+    /// In Minimal Lyrics Mode a line that ends while one above it is still sung stays, dimmed.
+    var keepOverlappingLines: Bool { didSet { defaults.set(keepOverlappingLines, forKey: Keys.keepOverlappingLines) } }
+    /// Experiment: background vocals stay tucked under their line until it's sung.
+    var backgroundLinePop: Bool { didSet { defaults.set(backgroundLinePop, forKey: Keys.backgroundLinePop) } }
+    /// Experiment: the refreshed Simple Lyrics Mode (one sweep along the line, floating words).
+    var refreshedSimpleLyrics: Bool { didSet { defaults.set(refreshedSimpleLyrics, forKey: Keys.refreshedSimpleLyrics) } }
+    /// What the cover background shows: the flowing cover, the still cover, the artist, the Canvas.
+    var backgroundStyle: String { didSet { defaults.set(backgroundStyle, forKey: Keys.backgroundStyle) } }
+    var background: BackgroundStyle { BackgroundStyle(rawValue: backgroundStyle) ?? .dynamic }
     /// Spicy Lyrics' "Refined Credits": quiet type under the last line instead of the old credit lines.
     var refinedCredits: Bool { didSet { defaults.set(refinedCredits, forKey: Keys.refinedCredits) } }
     /// A song ending on a duet line sung from the right keeps its credits on that side.
@@ -276,6 +289,12 @@ final class AppSettings {
             Keys.earlyScroll: false,
             Keys.earlyScrollMs: 250.0,
             Keys.refinedCredits: true,
+            Keys.joinSplitWords: false,
+            Keys.minimalLyricsMode: false,
+            Keys.keepOverlappingLines: true,
+            Keys.backgroundLinePop: false,
+            Keys.refreshedSimpleLyrics: false,
+            Keys.backgroundStyle: BackgroundStyle.dynamic.rawValue,
             Keys.seekFadeCompensation: true,
             Keys.creditsFollowLastLine: false,
             Keys.translationBrightness: 1.0,
@@ -355,6 +374,12 @@ final class AppSettings {
         earlyScroll = defaults.bool(forKey: Keys.earlyScroll)
         earlyScrollMs = defaults.double(forKey: Keys.earlyScrollMs)
         refinedCredits = defaults.bool(forKey: Keys.refinedCredits)
+        joinSplitWords = defaults.bool(forKey: Keys.joinSplitWords)
+        minimalLyricsMode = defaults.bool(forKey: Keys.minimalLyricsMode)
+        keepOverlappingLines = defaults.bool(forKey: Keys.keepOverlappingLines)
+        backgroundLinePop = defaults.bool(forKey: Keys.backgroundLinePop)
+        refreshedSimpleLyrics = defaults.bool(forKey: Keys.refreshedSimpleLyrics)
+        backgroundStyle = defaults.string(forKey: Keys.backgroundStyle) ?? BackgroundStyle.dynamic.rawValue
         seekFadeCompensation = defaults.bool(forKey: Keys.seekFadeCompensation)
         creditsFollowLastLine = defaults.bool(forKey: Keys.creditsFollowLastLine)
         translationBrightness = defaults.double(forKey: Keys.translationBrightness)
@@ -445,6 +470,9 @@ final class AppSettings {
         earlyScroll = false
         earlyScrollMs = 250
         refinedCredits = true
+        joinSplitWords = false
+        minimalLyricsMode = false
+        keepOverlappingLines = true
         seekFadeCompensation = true
         creditsFollowLastLine = false
     }
@@ -471,6 +499,7 @@ final class AppSettings {
 
     func resetEffects() {
         simpleLyricsMode = false
+        refreshedSimpleLyrics = false
         blurInactiveLines = true
         blurStrength = 1
         glowStrength = 1
@@ -479,6 +508,7 @@ final class AppSettings {
 
     func resetBackground() {
         dynamicBackground = true
+        backgroundStyle = BackgroundStyle.dynamic.rawValue
         backgroundDim = Self.defaultBackgroundDim
         backgroundSpeed = 1
         backgroundBlur = 1
@@ -561,6 +591,12 @@ final class AppSettings {
         static let earlyScroll = "earlyScroll"
         static let earlyScrollMs = "earlyScrollMs"
         static let refinedCredits = "refinedCredits"
+        static let joinSplitWords = "joinSplitWords"
+        static let minimalLyricsMode = "minimalLyricsMode"
+        static let keepOverlappingLines = "keepOverlappingLines"
+        static let backgroundLinePop = "backgroundLinePop"
+        static let refreshedSimpleLyrics = "refreshedSimpleLyrics"
+        static let backgroundStyle = "backgroundStyle"
         static let seekFadeCompensation = "seekFadeCompensation"
         static let creditsFollowLastLine = "creditsFollowLastLine"
         static let translationBrightness = "translationBrightness"
@@ -599,6 +635,29 @@ enum HiddenLyricsView: String, CaseIterable, Identifiable {
 }
 
 /// What flows behind the big cover.
+/// The extension's background styles that make sense on a phone (`BackgroundStyle` in stores.ts).
+enum BackgroundStyle: String, CaseIterable, Identifiable {
+    /// The cover flowing like liquid (Kawarp).
+    case dynamic
+    /// The cover, blurred and still.
+    case cover
+    /// The artist's photo, or the cover when there's none.
+    case artist
+    /// The song's Spotify Canvas video, or the flowing cover when it has none.
+    case canvas
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .dynamic: return String(localized: "Живая обложка")
+        case .cover: return String(localized: "Обложка")
+        case .artist: return String(localized: "Фото артиста")
+        case .canvas: return "Canvas"
+        }
+    }
+}
+
 enum ArtworkBackground: String, CaseIterable, Identifiable {
     /// The nebula.
     case nebula

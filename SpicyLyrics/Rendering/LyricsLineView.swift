@@ -20,18 +20,21 @@ struct LyricsTypography: Equatable {
     var translationScale: CGFloat = 1
     var translationBrightness: Double = 1
     var weight: Font.Weight = .bold
+    /// Refreshed Simple Lyrics: lines further apart, the part still to come a little brighter.
+    var refreshed = false
 
     var leadFont: Font { font.font(size: fontSize, weight: weight) }
     /// Width of the lit → unlit fade, as a fraction of a glyph.
     var fillFade: Double { simple ? 0.5 : 0.2 }
-    var leadAlpha: GradientAlpha { simple ? GradientAlpha(lit: 1, unlit: 0.3) : .lead }
+    var leadAlpha: GradientAlpha { simple ? GradientAlpha(lit: 1, unlit: refreshed ? 0.4 : 0.3) : .lead }
     /// `.line.bg-line { --font-size: calc(var(--DefaultLyricsSize) * 0.75) }`
     var backgroundFontSize: CGFloat { fontSize * 0.75 }
     var backgroundFont: Font { font.font(size: backgroundFontSize, weight: weight) }
     /// `.word::after { margin-right: 0.32ch }` (a "0" in the bold face is ~0.6em wide).
     func wordGap(_ size: CGFloat) -> CGFloat { size * 0.6 * 0.32 }
-    /// `.line { margin: 1cqw 0 }`, collapsing between neighbours.
-    var lineSpacing: CGFloat { cqw * lineSpacingScale }
+    /// `.line { margin: 1cqw 0 }`, collapsing between neighbours. Refreshed Simple Lyrics sets the
+    /// rows apart by a share of the type instead (`REFRESHED_GAP_EM`).
+    var lineSpacing: CGFloat { (refreshed ? fontSize * 0.62 : cqw) * lineSpacingScale }
     /// Static lyrics: `--DefaultLyricsSize: 5cqw` against the synced 7cqw, weight 500.
     var staticFont: Font { font.font(size: fontSize * 5 / 7, weight: .medium) }
     /// `.line { padding-right: 5cqw }`, or the 15cqw duet inset on the side a line leans away from.
@@ -51,12 +54,15 @@ struct LyricsTypography: Equatable {
             && lhs.inactiveBrightness == rhs.inactiveBrightness && lhs.lineSpacingScale == rhs.lineSpacingScale
             && lhs.translationScale == rhs.translationScale
             && lhs.translationBrightness == rhs.translationBrightness && lhs.weight == rhs.weight
+            && lhs.refreshed == rhs.refreshed
     }
 
     /// Scales how far a line's opacity sits below fully lit, so the active line stays at 1
     /// and the change animates as smoothly as the opacity itself.
     func opacity(_ value: Double) -> Double {
-        clamp(1 - (1 - value) * (2 - inactiveBrightness), 0.05, 1)
+        // Minimal Lyrics Mode fades sung lines out completely.
+        if value <= 0.001 { return 0 }
+        return clamp(1 - (1 - value) * (2 - inactiveBrightness), 0.05, 1)
     }
 }
 
@@ -126,10 +132,23 @@ struct LyricLineView: View, Equatable {
     let typography: LyricsTypography
     /// On-device translation shown under the line.
     var translation: String? = nil
+    /// In a list: the row brings the gap above it itself (a background row none, so one tucked
+    /// away by Pop-Out takes no room at all). Off, a background row pulls itself up by the gap.
+    var ownsGap = false
 
     static func == (lhs: LyricLineView, rhs: LyricLineView) -> Bool {
         lhs.line.id == rhs.line.id && lhs.visual == rhs.visual && lhs.typography == rhs.typography
-            && lhs.translation == rhs.translation
+            && lhs.translation == rhs.translation && lhs.ownsGap == rhs.ownsGap
+    }
+
+    private var rowAnchor: UnitPoint {
+        typography.centered ? .center : (line.oppositeAligned ? .trailing : .leading)
+    }
+
+    private var topGap: CGFloat {
+        if ownsGap { return line.isBackground ? 0 : typography.lineSpacing }
+        // `.bg-line { margin: -1cqw 0 1cqw }`: tucked right under the line above.
+        return line.isBackground ? -typography.lineSpacing : 0
     }
 
     private var horizontalAlignment: HorizontalAlignment {
@@ -152,9 +171,12 @@ struct LyricLineView: View, Equatable {
             }
         }
             .padding(typography.insets(opposite: line.oppositeAligned))
-            // `.bg-line { margin: -1cqw 0 1cqw }`: tucked right under the line above.
-            .padding(.top, line.isBackground ? -typography.lineSpacing : 0)
             .frame(maxWidth: .infinity, alignment: frameAlignment)
+            // Minimal Lyrics Mode: rows not being sung shrink a little toward their edge.
+            .scaleEffect(visual.rowScale, anchor: rowAnchor)
+            .modifier(PopOut(reveal: visual.reveal, fontSize: typography.backgroundFontSize,
+                             anchor: line.oppositeAligned && !typography.centered ? .topTrailing : .topLeading))
+            .padding(.top, topGap)
             .opacity(typography.opacity(visual.opacity))
             .blur(radius: visual.blur * typography.blurScale > 0.05 ? visual.blur * typography.blurScale / 2 : 0)
     }
@@ -198,8 +220,8 @@ struct LyricLineView: View, Equatable {
                 .foregroundStyle(.white)
 
         case .interlude:
-            InterludeDotsView(dots: visual.dots, presence: visual.presence, groupScale: visual.dotGroupScale,
-                              typography: typography)
+            InterludeDotsView(dots: visual.dots, presence: visual.presence,
+                              groupScale: visual.dotGroupScale * visual.dotBreath, typography: typography)
         }
     }
 }
@@ -300,10 +322,51 @@ private struct GlyphView: View {
         Text(text)
             .font(font)
             .fixedSize()
-            .lyricFill(visual.gradient, alpha: alpha, fade: fade)
+            .lyricFill(visual.gradient, alpha: alpha, fade: visual.fade ?? fade)
             .lyricGlow(visual.glow * glowScale, kind: glowKind)
             .scaleEffect(visual.scale)
-            .offset(x: xOffset, y: visual.yOffset * fontSize)
+            .offset(x: xOffset + visual.xOffset * fontSize, y: visual.yOffset * fontSize)
+    }
+}
+
+// MARK: - Pop-Out
+
+/// Background Vocal Pop-Out: a row tucked under its lead line takes no height; coming out it
+/// grows to its own height while sliding down from under the line and fading in (Mixed.css
+/// `.Exp_BackgroundLinePop .bg-line`). Fully out it is left alone.
+private struct PopOut: ViewModifier {
+    let reveal: Double
+    let fontSize: CGFloat
+    let anchor: UnitPoint
+
+    func body(content: Content) -> some View {
+        if reveal >= 0.999 {
+            content
+        } else {
+            RevealLayout(fraction: CGFloat(max(0, reveal))) {
+                content
+                    .scaleEffect(0.8 + 0.2 * reveal, anchor: anchor)
+                    .offset(y: -0.6 * fontSize * (1 - reveal))
+                    // The text is gone before the rows below glide in over it.
+                    .opacity(reveal * reveal)
+            }
+        }
+    }
+}
+
+/// Lays out its one child at full size but reports only `fraction` of its height.
+private struct RevealLayout: Layout {
+    var fraction: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let child = subviews.first else { return .zero }
+        let size = child.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(width: proposal.width ?? size.width, height: size.height * fraction)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, anchor: .topLeading,
+                              proposal: ProposedViewSize(width: bounds.width, height: nil))
     }
 }
 

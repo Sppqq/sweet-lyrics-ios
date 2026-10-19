@@ -38,6 +38,8 @@ struct SettingsView: View {
                              value: settings.dynamicBackground ? nil : String(localized: "Выкл.")) { BackgroundSettings() }
                     category(String(localized: "Перевод и романизация"), "character.bubble.fill", .blue,
                              value: translationSummary) { LanguageSettings() }
+                    category(String(localized: "Эксперименты"), "flask.fill", .purple,
+                             value: experimentsSummary) { ExperimentsSettings() }
                 }
 
                 Section(String(localized: "Экран плеера")) {
@@ -86,6 +88,13 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    /// How many experiments are switched away from their default.
+    private var experimentsSummary: String? {
+        let changed = [settings.refinedCredits != true, settings.backgroundLinePop, settings.refreshedSimpleLyrics]
+            .filter { $0 }.count
+        return changed == 0 ? nil : String(localized: "Изменено: \(changed)")
     }
 
     private var translationSummary: String? {
@@ -276,6 +285,18 @@ private struct TextLookSettings: View {
             }
 
             Section {
+                Toggle(String(localized: "Склеивать слова из слогов"), isOn: $settings.joinSplitWords)
+                Toggle(String(localized: "Скрывать спетые строки"), isOn: $settings.minimalLyricsMode)
+                if settings.minimalLyricsMode {
+                    Toggle(String(localized: "Оставлять перекрывающиеся строки"), isOn: $settings.keepOverlappingLines)
+                }
+            } header: {
+                Text(String(localized: "Строки"))
+            } footer: {
+                Text(String(localized: "Слово, спетое по слогам, показывается одним словом, если слоги идут ровно. Спетые строки плавно исчезают, следующие ждут чуть меньше и тусклее (Minimal Lyrics Mode). Строка, которая кончилась, пока выше ещё поют (бэк-вокал, наложения), может остаться приглушённой."))
+            }
+
+            Section {
                 SliderRow(title: String(localized: "Положение активной строки"), value: $settings.activeLinePosition,
                           range: 0.2...0.8, step: 0.05, format: Self.positionLabel)
                 SliderRow(title: String(localized: "Скорость прокрутки"), value: $settings.scrollSpeed, range: 0.5...3, step: 0.25)
@@ -292,12 +313,11 @@ private struct TextLookSettings: View {
             }
 
             Section {
-                Toggle(String(localized: "Новый вид титров"), isOn: $settings.refinedCredits)
                 Toggle(String(localized: "Титры за последним исполнителем"), isOn: $settings.creditsFollowLastLine)
             } header: {
                 Text(String(localized: "Титры"))
             } footer: {
-                Text(String(localized: "Авторы и источник текста под последней строкой: тихим шрифтом, без рамки, приглушены, пока последняя строка не спета. Если песня кончается дуэтной строкой справа, титры могут встать под неё."))
+                Text(String(localized: "Если песня кончается дуэтной строкой справа, авторы и источник текста встают под неё. Вид титров — в «Экспериментах»."))
             }
 
             ResetSection(title: String(localized: "Вернуть как было")) { settings.resetLyricsLook() }
@@ -369,6 +389,16 @@ private struct BackgroundSettings: View {
             }
 
             if settings.dynamicBackground {
+                Section {
+                    Picker(String(localized: "Что на фоне"), selection: $settings.backgroundStyle) {
+                        ForEach(BackgroundStyle.allCases) { style in
+                            Text(style.title).tag(style.rawValue)
+                        }
+                    }
+                } footer: {
+                    Text(backgroundStyleNote)
+                }
+
                 Section(String(localized: "Обложка")) {
                     SliderRow(title: String(localized: "Скорость движения"), value: $settings.backgroundSpeed, range: 0.25...3)
                     SliderRow(title: String(localized: "Размытие"), value: $settings.backgroundBlur, range: 0.3...3)
@@ -383,6 +413,48 @@ private struct BackgroundSettings: View {
             }
 
             ResetSection(title: String(localized: "Вернуть фон по умолчанию")) { settings.resetBackground() }
+        }
+    }
+}
+
+extension BackgroundSettings {
+    fileprivate var backgroundStyleNote: String {
+        switch settings.background {
+        case .dynamic: return String(localized: "Размытая обложка медленно плавает за текстом.")
+        case .cover: return String(localized: "Размытая обложка стоит на месте. Меньше тратит батарею.")
+        case .artist: return String(localized: "Фото артиста из Spotify, размытое. Если фото нет, видна обложка.")
+        case .canvas: return String(localized: "Короткое видео песни из Spotify (Canvas), если оно есть, иначе живая обложка. Расходует больше трафика и батареи.")
+        }
+    }
+}
+
+/// Experiments, as the extension keeps them: new looks that can be switched back to the old one.
+private struct ExperimentsSettings: View {
+    @Environment(AppSettings.self) private var settings
+
+    var body: some View {
+        @Bindable var settings = settings
+        Form {
+            Section {
+                Toggle(String(localized: "Новый вид титров"), isOn: $settings.refinedCredits)
+            } footer: {
+                Text(String(localized: "Авторы и источник текста под последней строкой: тихим шрифтом, без рамки, приглушены, пока последняя строка не спета. Для текстов от сообщества — кто сделал и кто загрузил. Выключите, чтобы вернуть прежние строки."))
+            }
+
+            Section {
+                Toggle(String(localized: "Выезжающий бэк-вокал"), isOn: $settings.backgroundLinePop)
+            } footer: {
+                Text(String(localized: "Строки бэк-вокала спрятаны под своей строкой, пока её не начнут петь, потом выезжают из-под неё, а строки ниже расступаются. Когда обе спеты, бэк-вокал прячется обратно."))
+            }
+
+            Section {
+                Toggle(String(localized: "Обновлённый Simple Lyrics"), isOn: $settings.refreshedSimpleLyrics)
+                    .disabled(!settings.simpleLyricsMode)
+            } footer: {
+                Text(settings.simpleLyricsMode
+                     ? String(localized: "Заливка идёт по строке одним мягким краем, слова всплывают одно за другим, буквы коротких протяжных слов чуть раздуваются, расходятся и светятся. Строки стоят дальше друг от друга, точки в проигрышах заполняются по одной и медленно «дышат».")
+                     : String(localized: "Работает только с Simple Lyrics Mode (Настройки → Эффекты)."))
+            }
         }
     }
 }

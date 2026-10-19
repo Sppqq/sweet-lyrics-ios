@@ -50,7 +50,15 @@ struct LyricsView: View {
         self.onInteraction = onInteraction
         self.onBackgroundTap = onBackgroundTap
         self.tapSeeks = tapSeeks
-        _animator = State(initialValue: LyricsAnimator(lyrics: lyrics, simple: settings.simpleLyricsMode))
+        _animator = State(initialValue: LyricsAnimator(lyrics: lyrics, simple: settings.simpleLyricsMode,
+                                                       minimal: settings.minimalLyricsMode,
+                                                       refreshed: settings.refreshedSimpleLyrics))
+    }
+
+    private var animatorOptions: LyricsAnimator.Options {
+        LyricsAnimator.Options(keepOverlapping: settings.keepOverlappingLines,
+                               // Reduced motion: background vocals simply stay out.
+                               popOut: settings.backgroundLinePop && !UIAccessibility.isReduceMotionEnabled)
     }
 
     /// Always the animator's copy, so line indices and visuals can never disagree.
@@ -71,7 +79,8 @@ struct LyricsView: View {
             lineSpacingScale: CGFloat(settings.lineSpacingScale),
             translationScale: CGFloat(settings.translationScale),
             translationBrightness: settings.translationBrightness,
-            weight: (LyricsWeight(rawValue: settings.lyricsWeight) ?? .bold).fontWeight
+            weight: (LyricsWeight(rawValue: settings.lyricsWeight) ?? .bold).fontWeight,
+            refreshed: animator.refreshed
         )
     }
 
@@ -107,7 +116,8 @@ struct LyricsView: View {
                         let now = MediaClock.now()
                         let _ = settings.showLyricsFPS ? frameCounter.tick(now) : ()
                         let _ = animator.step(position: player.position(at: now), now: now,
-                                              blurEnabled: settings.blurInactiveLines && !userScrolling && !reduced)
+                                              blurEnabled: settings.blurInactiveLines && !userScrolling && !reduced,
+                                              options: animatorOptions)
                         let focus = animator.focusIndex
                         // Early scroll: the line the scroll follows is the one that starts shortly.
                         let scrollFocus = settings.earlyScroll && shown.kind != .static && !animator.lyrics.lines.isEmpty
@@ -119,7 +129,8 @@ struct LyricsView: View {
                         let _ = culling.sync(CullingKey(typography: typography, topInset: topInset, bottomInset: bottomInset,
                                                         translated: settings.translateLyrics && !settings.translationReplaces
                                                             ? player.translations.count : -1))
-                        LazyVStack(alignment: .leading, spacing: typography.lineSpacing) {
+                        // No spacing of its own: each row brings the gap above it (see `ownsGap`).
+                        LazyVStack(alignment: .leading, spacing: 0) {
                             ForEach(shown.lines) { line in
                                 row(line, visual: visuals[line.id], typography: typography, focus: focus,
                                     viewport: geometry.size.height)
@@ -131,6 +142,7 @@ struct LyricsView: View {
                                               followLastLine: settings.creditsFollowLastLine && !settings.centerLyrics,
                                               allSung: shown.kind == .static
                                                   || player.position(at: now) >= (shown.lines.last?.end ?? 0))
+                                .padding(.top, typography.lineSpacing)
                         }
                         .padding(.horizontal, horizontalPadding)
                         .padding(.vertical, geometry.size.height * 0.6)
@@ -160,7 +172,8 @@ struct LyricsView: View {
                             animator.snapNext()
                             let now = MediaClock.now()
                             animator.step(position: player.position(at: now), now: now,
-                                          blurEnabled: settings.blurInactiveLines && !userScrolling && !reduced)
+                                          blurEnabled: settings.blurInactiveLines && !userScrolling && !reduced,
+                                          options: animatorOptions)
                             guard shown.kind != .static, !userScrolling else { return }
                             proxy.scrollTo(animator.focusIndex, anchor: anchor)
                         }
@@ -272,7 +285,8 @@ extension LyricsView {
             } else {
                 LyricLineView(line: line, visual: visual, typography: typography,
                               translation: settings.translateLyrics && !settings.translationReplaces
-                                  ? player.translations[line.sourceText] : nil)
+                                  ? player.translations[line.sourceText] : nil,
+                              ownsGap: true)
                     .equatable()
                     .contentShape(Rectangle())
                     .onTapGesture(coordinateSpace: .scrollView) { point in

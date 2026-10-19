@@ -147,6 +147,9 @@ struct PreparedLyrics: Hashable {
 
     /// Gap (seconds) that earns an interlude, like Spicy Lyrics' `getLyricsBetweenShow()`.
     static let interludeThreshold: Double = 3
+    static let minimalInterludeThreshold: Double = 5
+    /// Refreshed Simple Lyrics splits only words of this many letters (`IsLetterCapable.ts`).
+    static let refreshedLetterRange = 2...7
     /// The dots finish this long before the next line (Spicy's `preHiddenDotLineMs + 50`).
     static let interludePadding: Double = 0.55
     /// Syllables at least this long are animated per letter (Spicy's `IsLetterCapable`).
@@ -156,7 +159,15 @@ struct PreparedLyrics: Hashable {
 
     /// `replacements` maps a line's original text to what to show instead (a translation); the
     /// new words are re-timed over the original line's syllables.
-    init(document: LyricsDocument, romanized: Bool, simple: Bool = false, replacements: [String: String] = [:]) {
+    /// `joinSplit` puts a word sung in evenly paced parts back into one syllable (the extension's
+    /// Join Split Words), so it fills as one word. `minimal` (Minimal Lyrics Mode) keeps a line
+    /// lit until the next one starts when the gap is short, and only longer gaps get dots.
+    /// `refreshed` (Refreshed Simple Lyrics) splits only short held words into letters.
+    init(document: LyricsDocument, romanized: Bool, simple: Bool = false, joinSplit: Bool = false,
+         minimal: Bool = false, refreshed: Bool = false, replacements: [String: String] = [:]) {
+        let refreshed = simple && refreshed
+        // `getLyricsBetweenShow()`: 5 s in Minimal Lyrics Mode.
+        let interludeThreshold = minimal ? Self.minimalInterludeThreshold : Self.interludeThreshold
         kind = document.kind
         songwriters = document.songwriters
         sourceName = document.sourceName
@@ -183,7 +194,7 @@ struct PreparedLyrics: Hashable {
                        .static(text: replacements[line.text] ?? roman(line.text, line.romanizedText)), source: line.text)
             }
         case .line, .syllable:
-            if let first = source.first, first.start >= Self.interludeThreshold {
+            if let first = source.first, first.start >= interludeThreshold {
                 append(0, first.start, first.oppositeAligned, .interlude(dots: Self.dots(from: 0, to: first.start)))
             }
             // A long line (e.g. a trailing backing vocal) can outlast the lines after it, so a
@@ -196,16 +207,18 @@ struct PreparedLyrics: Hashable {
                     // own syllables (`Applyer/Synced/Syllable.ts`).
                     var leadID: Int?
                     let leadText = Self.plain(line.lead)
-                    let lead = replacements[leadText].map { Self.retimed($0, over: line.lead, simple: simple) }
-                        ?? Self.words(from: line.lead, simple: simple) { roman($0.text, $0.romanized) }
+                    let leadSyllables = joinSplit ? Self.joinSplitWords(line.lead) : line.lead
+                    let lead = replacements[leadText].map { Self.retimed($0, over: leadSyllables, simple: simple) }
+                        ?? Self.words(from: leadSyllables, simple: simple, refreshed: refreshed) { roman($0.text, $0.romanized) }
                     if !lead.isEmpty {
                         leadID = result.count
                         append(line.lead.map(\.start).min() ?? line.start, line.lead.map(\.end).max() ?? line.end,
                                line.oppositeAligned, .syllable(lead: lead, background: []), source: leadText)
                     }
-                    for group in line.backgroundVocals {
+                    for original in line.backgroundVocals {
+                        let group = joinSplit ? Self.joinSplitWords(original) : original
                         let words = replacements[Self.plain(group)].map { Self.retimed($0, over: group, simple: simple) }
-                            ?? Self.words(from: group, simple: simple) { roman($0.text, $0.romanized) }
+                            ?? Self.words(from: group, simple: simple, refreshed: refreshed) { roman($0.text, $0.romanized) }
                         guard !words.isEmpty, let start = group.map(\.start).min(), let end = group.map(\.end).max() else { continue }
                         result.append(PreparedLine(id: result.count, start: start, end: end,
                                                    oppositeAligned: line.oppositeAligned,
@@ -219,14 +232,25 @@ struct PreparedLyrics: Hashable {
                 }
                 if index + 1 < source.count {
                     let next = source[index + 1]
-                    if next.start - latestEnd >= Self.interludeThreshold {
+                    if next.start - latestEnd >= interludeThreshold {
                         append(latestEnd, next.start, next.oppositeAligned,
                                .interlude(dots: Self.dots(from: latestEnd, to: next.start)))
                     }
                 }
             }
         }
+        if minimal { Self.holdUntilNext(&result, threshold: interludeThreshold) }
         lines = result
+    }
+
+    /// Minimal Lyrics Mode (`Syllable.ts`): a sung line would fade out in every short breath, so
+    /// it stays lit until the next line starts when the gap is shorter than an interlude.
+    private static func holdUntilNext(_ lines: inout [PreparedLine], threshold: Double) {
+        let leads = lines.indices.filter { !lines[$0].isBackground && !lines[$0].isInterlude }
+        for (index, next) in zip(leads, leads.dropFirst()) {
+            let gap = lines[next].start - lines[index].end
+            if gap > 0, gap < threshold { lines[index].end = lines[next].start }
+        }
     }
 
     /// The three dots' timing, exactly as `Applyer/Synced/Syllable.ts` lays them out: thirds of the
@@ -245,12 +269,77 @@ struct PreparedLyrics: Hashable {
         ]
     }
 
+    /// Silence between two parts of a word beyond which one fill would run through it.
+    private static let maxJoinGap = 0.1
+    /// A part sung this many times faster or slower per character than the word as a whole stays
+    /// split, since a joined word fills at one steady pace.
+    private static let maxPaceRatio = 3.0
+
+    /// `JoinSplitWords.ts`: the parts of a split word back into one syllable. A word that doesn't
+    /// join cleanly (a gap, an uneven pace, a space inside, a trailing dash) stays split.
+    static func joinSplitWords(_ syllables: [LyricSyllable]) -> [LyricSyllable] {
+        var joined: [LyricSyllable] = []
+        var index = 0
+        while index < syllables.count {
+            var end = index
+            while syllables[end].joinsNext, end + 1 < syllables.count { end += 1 }
+            let run = Array(syllables[index...end])
+            if run.count > 1, canJoin(run) {
+                let romanized = run.contains { $0.romanized != nil }
+                    ? run.map { $0.romanized ?? $0.text }.joined() : nil
+                joined.append(LyricSyllable(text: run.map(\.text).joined(), romanized: romanized,
+                                            start: run[0].start, end: run.map(\.end).max() ?? run[0].end,
+                                            joinsNext: run[run.count - 1].joinsNext))
+            } else {
+                joined.append(contentsOf: run)
+            }
+            index = end + 1
+        }
+        return joined
+    }
+
+    private static func canJoin(_ run: [LyricSyllable]) -> Bool {
+        func hasSpace(_ text: String?) -> Bool { text?.contains { $0.isWhitespace } ?? false }
+        guard run.allSatisfy({ !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                 && !hasSpace($0.text) && !hasSpace($0.romanized) })
+        else { return false }
+        // "Ah-" "ah-" "ah": a trailing dash marks a deliberate break.
+        if run.dropLast().contains(where: { $0.text.last.map { "-‐‑‒–—―".contains($0) } ?? false }) { return false }
+        // Scripts written without spaces: their "words" can run the whole line.
+        if run.contains(where: { isUnspacedScript($0.text) }) { return false }
+        for (previous, next) in zip(run, run.dropFirst()) where next.start - previous.end > maxJoinGap {
+            return false
+        }
+        let duration = run[run.count - 1].end - run[0].start
+        let characters = Double(run.reduce(0) { $0 + $1.text.count })
+        guard duration > 0, characters > 0 else { return false }
+        return run.allSatisfy { part in
+            let timeShare = (part.end - part.start) / duration
+            let charShare = Double(part.text.count) / characters
+            return timeShare >= charShare / maxPaceRatio && timeShare <= charShare * maxPaceRatio
+        }
+    }
+
+    /// Han, kana, Thai, Lao, Khmer and Myanmar.
+    private static func isUnspacedScript(_ text: String) -> Bool {
+        text.unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x3040...0x30FF, 0x31F0...0x31FF, 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF,
+                 0xFF66...0xFF9F, 0x20000...0x2FA1F, 0x0E00...0x0EFF, 0x1780...0x17FF, 0x19E0...0x19FF,
+                 0x1000...0x109F:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
     /// Syllables as one string, spaced where words end.
     private static func plain(_ syllables: [LyricSyllable]) -> String {
         syllables.map { $0.text + ($0.joinsNext ? "" : " ") }.joined().trimmingCharacters(in: .whitespaces)
     }
 
-    private static func words(from syllables: [LyricSyllable], simple: Bool,
+    private static func words(from syllables: [LyricSyllable], simple: Bool, refreshed: Bool = false,
                               display: (LyricSyllable) -> String) -> [PreparedWord] {
         var words: [PreparedWord] = []
         var current: [PreparedSyllable] = []
@@ -265,7 +354,8 @@ struct PreparedLyrics: Hashable {
             if !text.isEmpty {
                 let start = max(syllable.start, earliestStart)
                 earliestStart = start
-                current.append(prepare(text: text, start: start, end: max(syllable.end, start), simple: simple))
+                current.append(prepare(text: text, start: start, end: max(syllable.end, start), simple: simple,
+                                       refreshed: refreshed))
             }
             if !syllable.joinsNext, !current.isEmpty {
                 words.append(PreparedWord(syllables: current))
@@ -330,11 +420,18 @@ struct PreparedLyrics: Hashable {
 
     /// `IsLetterCapable` and `Emphasize`: long syllables animate per letter. Simple Lyrics Mode
     /// only does so for up to 12 letters lasting 1.05 s, and shifts the letters a little later.
-    private static func prepare(text: String, start: Double, end: Double, simple: Bool) -> PreparedSyllable {
+    private static func prepare(text: String, start: Double, end: Double, simple: Bool,
+                                refreshed: Bool = false) -> PreparedSyllable {
         let characters = text.map(String.init)
         let duration = end - start
-        let capable = characters.count > 1 && !TextDirection.isRightToLeft(text)
-            && (simple ? characters.count <= 12 && duration >= 1.05 : duration >= letterCapableDuration)
+        let capable: Bool
+        if refreshed {
+            capable = refreshedLetterRange.contains(characters.count) && !TextDirection.isRightToLeft(text)
+                && duration >= letterCapableDuration
+        } else {
+            capable = characters.count > 1 && !TextDirection.isRightToLeft(text)
+                && (simple ? characters.count <= 12 && duration >= 1.05 : duration >= letterCapableDuration)
+        }
         guard capable else { return PreparedSyllable(text: text, start: start, end: end, letters: nil) }
 
         let letterStart = simple ? start + 0.021 : start

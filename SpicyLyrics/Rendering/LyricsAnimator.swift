@@ -27,6 +27,11 @@ struct GlyphVisual: Equatable {
     /// Left edge of the fill gradient as a fraction of the glyph width (-0.2 = unlit, 1 = lit).
     var gradient: Double = -0.2
     var opacity: Double = 1
+    /// Horizontal offset as a fraction of the font size (Refreshed Simple Lyrics' letter spread).
+    var xOffset: Double = 0
+    /// Width of the lit → unlit fade as a fraction of the glyph, when it isn't the look's own
+    /// (Refreshed Simple Lyrics: one fixed fade in em along the whole line).
+    var fade: Double? = nil
 }
 
 struct SyllableVisual: Equatable {
@@ -51,6 +56,12 @@ struct LineVisual: Equatable {
     var dots: [GlyphVisual] = []
     var presence: Double = 1
     var dotGroupScale: Double = 0
+    /// Refreshed Simple Lyrics: the dot group's slow breath, on top of `dotGroupScale`.
+    var dotBreath: Double = 1
+    /// Minimal Lyrics Mode: the whole row shrinks a little when it isn't being sung.
+    var rowScale: Double = 1
+    /// Background Vocal Pop-Out: 0 tucked away under its lead line (no height), 1 out.
+    var reveal: Double = 1
 }
 
 // MARK: - Animation curves (values from Spicy Lyrics' LyricsAnimator.ts)
@@ -114,6 +125,150 @@ private enum Curves {
     ]))
     /// The dots start hiding this long before the interlude ends (`preHiddenDotLineMs`).
     static let preHiddenDots = 0.5
+
+    // Minimal Lyrics Mode (Mixed.css `.Fullscreen.MinimalLyricsMode`).
+    static let minimalOpacity = (duration: 0.4, easing: Easing.cubicBezier(0, 0, 1, 1))
+    static let minimalScale = (duration: 0.4, easing: Easing.cubicBezier(0.42, 0, 0.58, 1))
+    static let minimalNotSung = (opacity: 0.5, scale: 0.965)
+    static let minimalSung = (opacity: 0.0, scale: 0.95)
+    static let minimalOverlapping = 0.45
+    /// Every line sung: they all come back, dim (`.LinesAllSung`).
+    static let minimalAllSung = 0.5
+
+    // Background Vocal Pop-Out: `transform 0.5s` out, `0.3s` back in.
+    static let revealEasing = Easing.cubicBezier(0.22, 1, 0.36, 1)
+    static let revealOpen = 0.5
+    static let revealClose = 0.3
+}
+
+/// Refreshed Simple Lyrics (`RefreshedEmphasis`, `RefreshedSweep`, `RefreshedDots` in LyricsAnimator.ts).
+private enum Refreshed {
+    static let minDuration = 1.0
+    static let stagger = 1 / 2.5
+    static let scale = 0.1, spread = 0.03, lift = 0.025, maxAmount = 1.2
+    static let maxBlur = 0.8
+    static let float = 0.05, floatLead = 0.4, floatStretch = 1.4
+    static let dimAlpha = 0.4
+    static let lastWordBoost = (amount: 1.6, blur: 1.5, duration: 1.2)
+    /// `--SLR_FadeWidth`.
+    static let fade = 0.55
+    /// Widths along the line, in em: a character of the bold face and the space after a word.
+    static let characterWidth = 0.55
+    static let wordGap = 0.6 * 0.32
+    static let dotDim = 0.22, dotLit = 0.92
+    static let dotEnter = 0.65, dotEnterStagger = 0.12
+    static let breath = 4.2, minBreath = 2.6, breathScale = 0.16
+
+    static let emphasisIn = Easing.cubicBezier(0.2, 0.4, 0.58, 1)
+    static let emphasisOut = Easing.cubicBezier(0.3, 0, 0.58, 1)
+
+    /// Up over the first half, down over the second.
+    static func emphasis(_ x: Double) -> Double {
+        if x <= 0 || x >= 1 { return 0 }
+        return x < 0.5 ? emphasisIn.value(at: x / 0.5) : 1 - emphasisOut.value(at: (x - 0.5) / 0.5)
+    }
+
+    /// How strong a held word's letters swell: faint below two seconds, then slowly more.
+    static func strength(duration: Double, lastWord: Bool) -> (amount: Double, blur: Double, duration: Double) {
+        func grow(_ x: Double) -> Double { x > 1 ? x.squareRoot() : x * x * x }
+        var du = max(minDuration, duration)
+        var amount = grow(du / 2) * 0.6
+        var blur = grow(du / 3) * 0.5
+        if lastWord {
+            amount *= lastWordBoost.amount
+            blur *= lastWordBoost.blur
+            du *= lastWordBoost.duration
+        }
+        return (min(maxAmount, amount), min(maxBlur, blur), du)
+    }
+
+    /// A word floats up from its start over its own length (never quicker than a second), easing out.
+    static func float(start: Double, end: Double, at time: Double) -> Double {
+        let x = clamp((time - start) / max(minDuration, end - start), 0, 1)
+        return 1 - (1 - x) * (1 - x)
+    }
+
+    static func smoothstep(_ x: Double) -> Double {
+        let t = clamp(x, 0, 1)
+        return t * t * (3 - 2 * t)
+    }
+}
+
+/// Where each syllable of a line sits on one strip, in em, and how far the light has come along
+/// it: `RefreshedSweep`. The edge crosses each syllable in that syllable's time and waits where
+/// the last one ended through a gap, so the fade runs on from word to word.
+private struct LineSweep {
+    struct Span {
+        var x: Double
+        var width: Double
+        var letterX: [Double]
+    }
+
+    var spans: [[Span]] = []
+
+    init(_ words: [PreparedWord]) {
+        var x = 0.0
+        spans = words.map { word in
+            word.syllables.enumerated().map { s, syllable in
+                let count = Double(max(1, syllable.text.count))
+                let width = count * Refreshed.characterWidth
+                let letters = syllable.letters.map { $0.indices.map { Double($0) * Refreshed.characterWidth } } ?? []
+                let span = Span(x: x, width: width, letterX: letters)
+                x += width + (s == word.syllables.count - 1 ? Refreshed.wordGap : 0)
+                return span
+            }
+        }
+    }
+
+    /// The edge for every syllable at `time`; -infinity where no light has reached.
+    func edges(_ words: [PreparedWord], at time: Double) -> [[Double]] {
+        let half = Refreshed.fade / 2
+        let flat = words.flatMap(\.syllables)
+        let boxes = spans.flatMap { $0 }
+        var at = [Double](repeating: -.infinity, count: flat.count)
+        var reached = -Double.infinity
+        for i in flat.indices {
+            let syllable = flat[i], box = boxes[i]
+            let from = i == 0 ? box.x - half : box.x
+            let to = box.x + box.width + (i == flat.count - 1 ? half : 0)
+            if time >= syllable.end {
+                at[i] = to
+            } else if time > syllable.start {
+                at[i] = from + (to - from) * (time - syllable.start) / (syllable.end - syllable.start)
+            }
+            reached = max(reached, at[i])
+        }
+        // One being sung shows its own edge; one still to come is lit only by those before it;
+        // one already sung follows the light wherever it is.
+        var edges = at
+        var before = -Double.infinity
+        for i in flat.indices {
+            let syllable = flat[i]
+            if time >= syllable.end { edges[i] = reached } else if time <= syllable.start { edges[i] = before }
+            before = max(before, at[i])
+        }
+        var result: [[Double]] = []
+        var index = 0
+        for word in words {
+            result.append(Array(edges[index..<index + word.syllables.count]))
+            index += word.syllables.count
+        }
+        return result
+    }
+
+    /// The fill of a box `width` em wide at `x` with the edge at `edge`: (gradient, fade) for `lyricFill`.
+    static func fill(edge: Double, x: Double, width: Double) -> (gradient: Double, fade: Double) {
+        let fade = Refreshed.fade / width
+        guard edge.isFinite else { return (-1000, fade) }
+        return ((edge - Refreshed.fade / 2 - x) / width, fade)
+    }
+
+    /// How lit a box is, 0…1, for the glow that dims with the text.
+    static func lit(edge: Double, x: Double, width: Double) -> Double {
+        guard edge.isFinite else { return 0 }
+        let rest = (width + Refreshed.fade / 2 - (edge - x)) / (width + Refreshed.fade)
+        return clamp(1 - rest, 0, 1)
+    }
 }
 
 // MARK: - Spring bundles
@@ -174,6 +329,9 @@ private struct LineSprings {
     var scale: Tween
     var glow: Spring
     var dotGroup = InOutTween()
+    var rowScale: Tween
+    var reveal = Tween(1, duration: Curves.revealOpen, easing: Curves.revealEasing)
+    var revealOpen = true
     var lead: [[SyllableSprings]]
     var background: [[SyllableSprings]]
     var dots: [DotSprings]
@@ -191,7 +349,21 @@ final class LyricsAnimator {
     let lyrics: PreparedLyrics
     /// Simple Lyrics Mode.
     let simple: Bool
+    /// Minimal Lyrics Mode: sung lines fade out.
+    let minimal: Bool
+    /// Refreshed Simple Lyrics (only with `simple`).
+    let refreshed: Bool
     private(set) var visuals: [LineVisual]
+    /// Where each syllable-synced row's syllables sit along one strip (Refreshed Simple Lyrics).
+    private var sweeps: [Int: LineSweep] = [:]
+
+    /// Switches that can change while the lyrics are on screen.
+    struct Options: Equatable {
+        /// Minimal Lyrics Mode: a line ending while one above it is still sung stays, dimmed.
+        var keepOverlapping = true
+        /// Background vocals tucked under their line until it's sung.
+        var popOut = false
+    }
     /// The line the view should keep in focus (scroll target and blur origin).
     private(set) var focusIndex: Int = 0
 
@@ -204,15 +376,23 @@ final class LyricsAnimator {
     /// The next step jumps straight to the clock (it was just checked and may have moved).
     func snapNext() { lastPosition = nil }
 
-    init(lyrics: PreparedLyrics, simple: Bool = false) {
+    init(lyrics: PreparedLyrics, simple: Bool = false, minimal: Bool = false, refreshed: Bool = false) {
         self.lyrics = lyrics
         self.simple = simple
-        springs = lyrics.lines.map(Self.makeSprings)
+        self.minimal = minimal
+        self.refreshed = simple && refreshed
+        springs = lyrics.lines.map { Self.makeSprings($0, minimal: minimal) }
         visuals = lyrics.lines.map(Self.makeVisual)
+        if self.refreshed {
+            for line in lyrics.lines {
+                if case .syllable(let lead, _) = line.kind { sweeps[line.id] = LineSweep(lead) }
+            }
+        }
     }
 
     /// Advances every spring to `position` (seconds). Safe to call more than once per frame.
-    func step(position: Double, now: CFTimeInterval, blurEnabled: Bool) {
+    func step(position: Double, now: CFTimeInterval, blurEnabled: Bool,
+              options: Options = Options()) {
         let position = position + (simple ? Curves.simplePositionOffset : 0)
         var dt = lastFrame.map { now - $0 } ?? (1.0 / 60)
         if dt <= 0 { return }
@@ -239,6 +419,16 @@ final class LyricsAnimator {
 
         focusIndex = Self.focus(in: lyrics.lines, at: position)
         var previousActive = false
+        // Minimal Lyrics Mode looks at the whole list: the first line being sung, and whether
+        // every line has been sung.
+        var firstActive = -1
+        var allSung = true
+        if minimal {
+            for line in lyrics.lines where !line.isInterlude {
+                if firstActive < 0, ElementState(position, line.start, line.end) == .active { firstActive = line.id }
+                if position < line.end { allSung = false }
+            }
+        }
 
         for index in lyrics.lines.indices {
             let line = lyrics.lines[index]
@@ -257,6 +447,27 @@ final class LyricsAnimator {
             if state == .sung, previousActive, blurEnabled, !line.isInterlude {
                 targetOpacity = Curves.sungAfterActiveOpacity
             }
+            var targetRowScale = 1.0
+            if minimal, !line.isInterlude {
+                if allSung {
+                    targetOpacity = Curves.minimalAllSung
+                } else {
+                    switch state {
+                    case .active:
+                        targetOpacity = Curves.activeOpacity
+                    case .notSung:
+                        (targetOpacity, targetRowScale) = Curves.minimalNotSung
+                    case .sung:
+                        if options.keepOverlapping, firstActive >= 0, index > firstActive {
+                            // Overlapping lines, background vocals: still in the picture.
+                            targetOpacity = Curves.minimalOverlapping
+                        } else {
+                            (targetOpacity, targetRowScale) = Curves.minimalSung
+                            if previousActive { targetOpacity = Curves.minimalOverlapping }
+                        }
+                    }
+                }
+            }
             if !line.isInterlude { previousActive = state == .active }
 
             let distance = abs(index - focusIndex)
@@ -266,11 +477,22 @@ final class LyricsAnimator {
             var visual = visuals[index]
             visual.state = state
             visual.blur = blur
+            visual.rowScale = lineSprings.rowScale.update(to: targetRowScale, now: now, snap: jumped)
+            if line.isBackground {
+                visual.reveal = stepReveal(line, state: state, springs: &lineSprings, now: now,
+                                           enabled: options.popOut, snap: jumped)
+            }
 
             switch line.kind {
             case .syllable(let lead, let background):
                 visual.opacity = lineSprings.opacity.update(to: targetOpacity, now: now, snap: jumped)
-                if lineSprings.awake {
+                if refreshed, let sweep = sweeps[line.id] {
+                    if lineSprings.awake {
+                        let settled = stepRefreshedWords(lead, sweep: sweep, into: &visual.lead, time: position,
+                                                         background: line.isBackground)
+                        if state != .active, settled { lineSprings.awake = false }
+                    }
+                } else if lineSprings.awake {
                     let settledLead = stepWords(lead, springs: &lineSprings.lead, into: &visual.lead,
                                                 time: position, dt: dt, snap: jumped)
                     let settledBackground = stepWords(background, springs: &lineSprings.background,
@@ -280,8 +502,9 @@ final class LyricsAnimator {
 
             case .line:
                 visual.opacity = lineSprings.opacity.update(to: targetOpacity, now: now, snap: jumped)
+                // Minimal Lyrics Mode keeps the active line at its size.
                 visual.scale = lineSprings.scale.update(
-                    to: state == .active ? Curves.activeLineSyncedScale : 1, now: now, snap: jumped)
+                    to: state == .active && !minimal ? Curves.activeLineSyncedScale : 1, now: now, snap: jumped)
                 if lineSprings.awake {
                     let p = progress(position, line.start, line.end)
                     let targetGlow: Double
@@ -308,7 +531,13 @@ final class LyricsAnimator {
                 let preHidden = position > line.end - Curves.preHiddenDots
                 visual.dotGroupScale = lineSprings.dotGroup.update(
                     show: state == .active && !preHidden, now: now, snap: jumped)
-                if lineSprings.awake {
+                if refreshed {
+                    // The dots don't bounce: each fills over its own third, the group breathes.
+                    if lineSprings.awake {
+                        stepRefreshedDots(line, dots, into: &visual, time: position)
+                        if state != .active, lineSprings.dotGroup.isSettled { lineSprings.awake = false }
+                    }
+                } else if lineSprings.awake {
                     var settled = lineSprings.dotGroup.isSettled
                     for (k, dot) in dots.enumerated() {
                         let p: Double
@@ -352,6 +581,101 @@ final class LyricsAnimator {
             springs[index] = lineSprings
             if visuals[index] != visual { visuals[index] = visual }
         }
+    }
+
+    /// Background Vocal Pop-Out (`markBackgroundGroups`): out while its lead line or itself is
+    /// sung, and after both are sung until the lyrics move on to another line.
+    private func stepReveal(_ line: PreparedLine, state: ElementState, springs: inout LineSprings,
+                            now: Double, enabled: Bool, snap: Bool) -> Double {
+        var open = true
+        if enabled, let leadID = line.leadID, lyrics.lines.indices.contains(leadID) {
+            let lead = lyrics.lines[leadID]
+            let leadState = ElementState(lastPosition ?? 0, lead.start, lead.end)
+            open = leadState == .active || state == .active
+            if !open, leadState == .sung, state == .sung, springs.revealOpen, focusIndex == leadID { open = true }
+        }
+        if open != springs.revealOpen {
+            springs.revealOpen = open
+            springs.reveal = Tween(springs.reveal.value, duration: open ? Curves.revealOpen : Curves.revealClose,
+                                   easing: Curves.revealEasing)
+            springs.awake = true
+        }
+        return springs.reveal.update(to: open ? 1 : 0, now: now, snap: snap || !enabled)
+    }
+
+    /// Refreshed Simple Lyrics: the words float up as they're sung (no word higher than the one
+    /// before it), the fill comes from the line's one sweep, and the letters of a short held word
+    /// swell, spread, lift and glow one after another. Worked out from the clock, no springs.
+    /// Returns whether nothing is moving any more.
+    private func stepRefreshedWords(_ words: [PreparedWord], sweep: LineSweep, into visuals: inout [[SyllableVisual]],
+                                    time: Double, background: Bool) -> Bool {
+        let edges = sweep.edges(words, at: time)
+        var floatCap = 1.0
+        var settled = true
+        let lastWord = words.count - 1
+        for w in words.indices {
+            for s in words[w].syllables.indices {
+                let syllable = words[w].syllables[s]
+                let span = sweep.spans[w][s]
+                let edge = edges[w][s]
+                var visual = visuals[w][s]
+
+                floatCap = min(floatCap, Refreshed.float(start: syllable.start, end: syllable.end, at: time))
+                if floatCap > 0, floatCap < 1 { settled = false }
+                let fill = LineSweep.fill(edge: edge, x: span.x, width: span.width)
+                visual.glyph = GlyphVisual(scale: 1, yOffset: Curves.simpleYOffset.at(floatCap), glow: 0,
+                                           gradient: fill.gradient, opacity: 1, fade: fill.fade)
+
+                if let letters = syllable.letters, let first = letters.first {
+                    let strength = Refreshed.strength(duration: syllable.end - syllable.start, lastWord: w == lastWord)
+                    let count = Double(max(1, letters.count))
+                    let floatHeight = Refreshed.float * (background ? 2 : 1)
+                    for k in letters.indices {
+                        let at = time - first.start - (strength.duration * Refreshed.stagger / count) * Double(k)
+                        let swell = Refreshed.emphasis(at / strength.duration)
+                        let floatAt = (at + Refreshed.floatLead) / (strength.duration * Refreshed.floatStretch)
+                        let float = floatAt > 0 && floatAt < 1 ? sin(floatAt * .pi) * floatHeight : 0
+                        if swell != 0 || float != 0 { settled = false }
+                        let letterX = span.x + (span.letterX.indices.contains(k) ? span.letterX[k] : 0)
+                        let letterFill = LineSweep.fill(edge: edge, x: letterX, width: Refreshed.characterWidth)
+                        let lit = LineSweep.lit(edge: edge, x: letterX, width: Refreshed.characterWidth)
+                        let alpha = swell * strength.blur * (Refreshed.dimAlpha + (1 - Refreshed.dimAlpha) * lit)
+                        visual.letters[k] = GlyphVisual(
+                            scale: 1 + swell * Refreshed.scale * strength.amount,
+                            yOffset: -swell * Refreshed.lift * strength.amount - float,
+                            // `GlowKind.letter` shows 1.85 × glow.
+                            glow: alpha / 1.85,
+                            gradient: letterFill.gradient, opacity: 1,
+                            xOffset: -swell * Refreshed.spread * strength.amount * (count / 2 - Double(k)),
+                            fade: letterFill.fade)
+                    }
+                }
+                visuals[w][s] = visual
+            }
+        }
+        return settled
+    }
+
+    /// Refreshed Simple Lyrics interlude (`animateRefreshedDot`): each dot fills from dim to lit
+    /// over its third and fades in one after another; the group breathes in whole slow cycles.
+    private func stepRefreshedDots(_ line: PreparedLine, _ dots: [PreparedLetter], into visual: inout LineVisual,
+                                   time: Double) {
+        let elapsed = time - line.start
+        for (k, dot) in dots.enumerated() {
+            let p = progress(time, dot.start, dot.end)
+            let fill = 0.5 - 0.5 * cos(.pi * p)
+            let enter = Refreshed.smoothstep((elapsed - Double(k) * Refreshed.dotEnterStagger) / Refreshed.dotEnter)
+            visual.dots[k] = GlyphVisual(scale: 1, yOffset: 0, glow: 0, gradient: 1,
+                                         opacity: (Refreshed.dotDim + (Refreshed.dotLit - Refreshed.dotDim) * fill) * enter)
+        }
+        let room = line.end - line.start - Curves.preHiddenDots
+        var breath = 1.0
+        if room >= Refreshed.minBreath {
+            let cycles = max(1, (room / Refreshed.breath).rounded())
+            let phase = clamp(elapsed / (room / cycles), 0, cycles)
+            breath = 1 + Refreshed.breathScale * (0.5 - 0.5 * cos(2 * .pi * phase))
+        }
+        visual.dotBreath = breath
     }
 
     /// Lines starting this close together are sung together (a duet); the first one keeps focus.
@@ -537,7 +861,7 @@ final class LyricsAnimator {
 
     // MARK: Construction
 
-    private static func makeSprings(_ line: PreparedLine) -> LineSprings {
+    private static func makeSprings(_ line: PreparedLine, minimal: Bool) -> LineSprings {
         func syllableSprings(_ words: [PreparedWord]) -> [[SyllableSprings]] {
             words.map { word in
                 word.syllables.map { syllable in
@@ -570,7 +894,7 @@ final class LyricsAnimator {
         default:
             break
         }
-        let opacity: Tween
+        var opacity: Tween
         switch line.kind {
         case .interlude:
             opacity = Tween(0, duration: Curves.interludeOpacity.duration, easing: Curves.interludeOpacity.easing)
@@ -579,10 +903,14 @@ final class LyricsAnimator {
         default:
             opacity = Tween(Curves.notSungOpacity, duration: Curves.lineOpacity.duration, easing: Curves.lineOpacity.easing)
         }
+        if minimal, !line.isInterlude {
+            opacity = Tween(Curves.notSungOpacity, duration: Curves.minimalOpacity.duration, easing: Curves.minimalOpacity.easing)
+        }
         return LineSprings(
             opacity: opacity,
             scale: Tween(1, duration: Curves.lineSynced.duration, easing: Curves.lineSynced.easing),
             glow: Spring(0, frequency: 1, damping: 0.5),
+            rowScale: Tween(1, duration: Curves.minimalScale.duration, easing: Curves.minimalScale.easing),
             lead: lead,
             background: background,
             dots: dots

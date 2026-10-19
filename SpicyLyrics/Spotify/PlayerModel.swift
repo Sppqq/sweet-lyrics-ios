@@ -79,6 +79,19 @@ final class PlayerModel {
     @ObservationIgnored private var rawLyrics: LyricsDocument?
     @ObservationIgnored private var preparedRomanized = false
     @ObservationIgnored private var preparedSimple = false
+    /// The other display settings the current lyrics were prepared with.
+    @ObservationIgnored private var preparedShape = PreparedShape()
+
+    private struct PreparedShape: Equatable {
+        var joinSplit = false
+        var minimal = false
+        var refreshed = false
+    }
+
+    private var currentShape: PreparedShape {
+        PreparedShape(joinSplit: settings.joinSplitWords, minimal: settings.minimalLyricsMode,
+                      refreshed: settings.refreshedSimpleLyrics)
+    }
     /// Translations the shown lyrics were built with (replace mode), to rebuild only on change.
     @ObservationIgnored private var preparedReplacements: [String: String] = [:]
     /// Changes only when different lyrics arrive; translations belong to one revision of these.
@@ -1444,17 +1457,20 @@ final class PlayerModel {
     private func prepare(_ document: LyricsDocument) {
         preparedRomanized = settings.showRomanization
         preparedSimple = settings.simpleLyricsMode
+        preparedShape = currentShape
         preparedReplacements = replacements
         lyricsRevision += 1
         lyricsState = .loaded(PreparedLyrics(document: document, romanized: preparedRomanized,
-                                             simple: preparedSimple, replacements: preparedReplacements))
+                                             simple: preparedSimple, joinSplit: preparedShape.joinSplit,
+                                             minimal: preparedShape.minimal, refreshed: preparedShape.refreshed,
+                                             replacements: preparedReplacements))
     }
 
     /// Re-prepares the current lyrics after a display setting (or a replacing translation) changed.
     func settingsChanged() {
         guard let rawLyrics,
               preparedRomanized != settings.showRomanization || preparedSimple != settings.simpleLyricsMode
-                || preparedReplacements != replacements
+                || preparedShape != currentShape || preparedReplacements != replacements
         else { return }
         prepare(rawLyrics)
     }

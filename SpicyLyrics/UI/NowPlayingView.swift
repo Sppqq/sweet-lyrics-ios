@@ -183,6 +183,9 @@ struct NowPlayingView: View {
         }
         .onChange(of: settings.showRomanization) { _, _ in player.settingsChanged() }
         .onChange(of: settings.simpleLyricsMode) { _, _ in player.settingsChanged() }
+        .onChange(of: settings.joinSplitWords) { _, _ in player.settingsChanged() }
+        .onChange(of: settings.minimalLyricsMode) { _, _ in player.settingsChanged() }
+        .onChange(of: settings.refreshedSimpleLyrics) { _, _ in player.settingsChanged() }
         .onChange(of: settings.translationReplaces) { _, _ in player.settingsChanged() }
         .onChange(of: settings.translateLyrics) { _, _ in player.settingsChanged() }
         .modifier(LyricsTranslation(player: player, settings: settings))
