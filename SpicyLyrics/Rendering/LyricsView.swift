@@ -37,9 +37,11 @@ struct LyricsView: View {
     @State private var frameCounter = FrameRateCounter()
     /// Which lines are far enough off screen to skip drawing.
     @State private var culling = LineCulling()
-    /// The line held down: its actions show in a dialog outside the per-frame timeline. A
-    /// context menu on the line itself was rebuilt every frame, and its buttons did nothing.
-    @State private var menuLine: PreparedLine?
+    /// The line held down: its actions show in a menu over the lyrics, outside the per-frame
+    /// timeline. A context menu on the line itself was rebuilt every frame, and its buttons did nothing.
+    @State private var held: HeldLine?
+    /// The line under a finger that may become a long press: it gives a little.
+    @State private var pressedLine: Int?
     @State private var menuTick = 0
     /// "Что это значит?" from the line's menu.
     @State private var explainRequest: ExplainRequest?
@@ -211,6 +213,20 @@ struct LyricsView: View {
                 }
                 .modifier(ScrollInteractionObserver(onChange: scrollInteraction))
                 .mask(EdgeFade(top: topInset, bottom: bottomInset))
+                // The held line's menu: everything behind it goes soft.
+                .blur(radius: held == nil ? 0 : 12)
+                .scaleEffect(held == nil ? 1 : 0.985)
+                .animation(.spring(response: 0.42, dampingFraction: 0.85), value: held == nil)
+                .overlay {
+                    if let held {
+                        LineActionMenu(held: held, font: typography.leadFont, centered: settings.centerLyrics,
+                                       canSeek: shown.kind != .static,
+                                       canExplain: player.track.flatMap { ExplainRequest(track: $0, lyrics: shown, line: held.line) } != nil,
+                                       topInset: topInset, bottomInset: bottomInset,
+                                       onAction: { perform($0, on: held.line) },
+                                       onDismiss: { self.held = nil })
+                    }
+                }
                 // Pinch to resize the lyrics; saved when the fingers lift.
                 .pinch(enabled: settings.gesturesEnabled) { scale in
                     pinchScale = scale
@@ -248,23 +264,22 @@ struct LyricsView: View {
             }
         }
         .sensoryFeedback(.impact(weight: .medium), trigger: menuTick)
-        .confirmationDialog(menuTitle, isPresented: menuShown, titleVisibility: .visible, presenting: menuLine) { line in
-            lineActions(line)
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.5), trigger: pressedLine) { _, new in new != nil }
+        #if DEBUG
+        // `-demoHoldLine <n>`: the n-th line with words in it, held, for screenshots.
+        .task {
+            guard let n = UserDefaults.standard.object(forKey: "demoHoldLine") as? Int ?? Int(UserDefaults.standard.string(forKey: "demoHoldLine") ?? "") else { return }
+            try? await Task.sleep(for: .seconds(4))
+            let words = shown.lines.filter { !$0.isInterlude }
+            guard words.indices.contains(n), let frame = culling.frame(of: words[n].id) else { return }
+            menuTick += 1
+            held = HeldLine(line: words[n], frame: frame)
         }
+        #endif
         .sheet(item: $explainRequest) { request in
             LineExplanationView(request: request)
                 .environment(player)
         }
-    }
-
-    private var menuShown: Binding<Bool> {
-        Binding(get: { menuLine != nil }, set: { if !$0 { menuLine = nil } })
-    }
-
-    /// The held line, shortened if it is long.
-    private var menuTitle: String {
-        let text = menuLine?.plainText ?? ""
-        return text.count > 80 ? String(text.prefix(80)) + "…" : text
     }
 
     /// The user started or stopped dragging the lyrics.
@@ -332,11 +347,23 @@ extension LyricsView {
                         resumeAutoScrollAt = .distantPast
                         player.seekLyrics(to: seekTarget(line))
                     }
+                    // Held: it gives a little under the finger, then lifts out into its menu.
+                    .scaleEffect(pressedLine == line.id ? 0.955 : 1, anchor: pressAnchor(line))
+                    .brightness(pressedLine == line.id ? 0.08 : 0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.62), value: pressedLine == line.id)
                     .onLongPressGesture(minimumDuration: 0.4) {
-                        guard !line.isInterlude else { return }
+                        guard !line.isInterlude, let frame = culling.frame(of: line.id) else { return }
                         onInteraction()
                         menuTick += 1
-                        menuLine = line
+                        pressedLine = nil
+                        held = HeldLine(line: line, frame: frame)
+                    } onPressingChanged: { pressing in
+                        guard !line.isInterlude else { return }
+                        if pressing {
+                            pressedLine = line.id
+                        } else if pressedLine == line.id {
+                            pressedLine = nil
+                        }
                     }
                     // Entirely under the header or the controls: nobody sees it, so it is not
                     // there for taps and long presses either (a scroll still passes through).
@@ -345,6 +372,7 @@ extension LyricsView {
         }
         .onGeometryChange(for: LineSpot.self) { proxy in
             let frame = proxy.frame(in: .scrollView)
+            culling.note(line.id, frame: frame)
             let margin = viewport * Self.cullMargin
             return LineSpot(height: proxy.size.height,
                             near: frame.maxY > -margin && frame.minY < viewport + margin,
@@ -365,30 +393,27 @@ extension LyricsView {
         return max(0, line.start - lead - settings.timingOffsetMs / 1000 + player.appliedOutputLatency)
     }
 
-    /// Long press on a line: what can be done with it.
-    @ViewBuilder
-    func lineActions(_ line: PreparedLine) -> some View {
-        if let track = player.track, let request = ExplainRequest(track: track, lyrics: shown, line: line) {
-            Button(String(localized: "Что это значит?")) {
-                explainRequest = request
-            }
-        }
-        if shown.kind != .static {
-            Button(String(localized: "Перемотать сюда")) {
-                resumeAutoScrollAt = .distantPast
-                player.seekLyrics(to: seekTarget(line))
-            }
-        }
-        Button(String(localized: "Скопировать строку")) {
+    /// The held line shrinks towards its own side.
+    private func pressAnchor(_ line: PreparedLine) -> UnitPoint {
+        if settings.centerLyrics { return .center }
+        return line.oppositeAligned ? .trailing : .leading
+    }
+
+    /// One of the held line's menu actions.
+    private func perform(_ action: LineAction, on line: PreparedLine) {
+        switch action {
+        case .explain:
+            explainRequest = player.track.flatMap { ExplainRequest(track: $0, lyrics: shown, line: line) }
+        case .seek:
+            resumeAutoScrollAt = .distantPast
+            player.seekLyrics(to: seekTarget(line))
+        case .copy:
             UIPasteboard.general.string = line.plainText
-        }
-        Button(String(localized: "Скопировать весь текст")) {
+        case .copyAll:
             UIPasteboard.general.string = shown.lines.filter { !$0.isInterlude }.map(\.plainText).joined(separator: "\n")
-        }
-        Button(String(localized: "Поделиться строкой")) {
+        case .share:
             ShareSheet.present(line.plainText)
         }
-        Button(String(localized: "Отмена"), role: .cancel) {}
     }
 }
 
@@ -446,6 +471,12 @@ private final class LineCulling {
         far.removeAll()
         hidden.removeAll()
     }
+
+    /// Where each drawn line is in the scroll view's visible space; read when one is held.
+    private var frames: [Int: CGRect] = [:]
+
+    func note(_ id: Int, frame: CGRect) { frames[id] = frame }
+    func frame(of id: Int) -> CGRect? { frames[id] }
 
     func record(_ id: Int, _ spot: LineSpot) {
         heights[id] = spot.height
