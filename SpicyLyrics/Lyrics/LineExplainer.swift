@@ -19,6 +19,36 @@ struct LineExplanation: Decodable, Equatable {
     var meaning: String
     var notes: [Note]
     var artists: [Artist]
+    /// The server's name for this answer, for a complaint about it.
+    var id: String?
+}
+
+/// Why a listener says an answer is no good.
+enum ExplanationComplaint: String, CaseIterable, Identifiable {
+    case wrong, language, offensive, other
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .wrong: return String(localized: "Неправда или выдумка")
+        case .language: return String(localized: "Не на моём языке")
+        case .offensive: return String(localized: "Грубо или неуместно")
+        case .other: return String(localized: "Другое…")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .wrong: return "xmark.seal"
+        case .language: return "character.bubble"
+        case .offensive: return "hand.raised"
+        case .other: return "ellipsis.bubble"
+        }
+    }
+
+    /// The server drops the answer: asking again gets a new one.
+    var replacesAnswer: Bool { self == .wrong || self == .language }
 }
 
 /// What to explain: a song, and one of its lines or none (the whole song).
@@ -137,6 +167,25 @@ enum LineExplainer {
         }
         cache[key] = answer
         return answer
+    }
+
+    /// Tells the server what is wrong with an answer. A wrong or wrong-language one is forgotten
+    /// here too, so the next look asks for a new one.
+    static func report(_ answer: LineExplanation, for request: ExplainRequest, reason: ExplanationComplaint,
+                       comment: String, installID: String) async throws {
+        guard let id = answer.id else { throw Failure.server }
+        var urlRequest = URLRequest(url: endpoint.appending(path: "report"), timeoutInterval: 20)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue(installID, forHTTPHeaderField: "X-Install-Id")
+        urlRequest.httpBody = try JSONSerialization.data(withJSONObject: ["id": id, "reason": reason.rawValue, "comment": comment])
+        let (_, response) = try await URLSession.shared.data(for: urlRequest)
+        switch (response as? HTTPURLResponse)?.statusCode ?? 0 {
+        case 200: break
+        case 429: throw Failure.limited
+        default: throw Failure.server
+        }
+        if reason.replacesAnswer { cache[key(request)] = nil }
     }
 
     private static func key(_ request: ExplainRequest) -> String {

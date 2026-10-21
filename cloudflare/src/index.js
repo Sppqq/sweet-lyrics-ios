@@ -7,7 +7,7 @@
 // /v1/explain explains a lyric line or a whole song with Mercury (explain.js).
 // /v1/config serves the app's request cadence, timeouts and cache lifetimes (RemoteConfig.swift).
 
-import { explain, pruneExplanations } from "./explain.js";
+import { explain, explainReportsPage, pruneExplanations, reportExplanation } from "./explain.js";
 import { pruneTranslations, translate } from "./translate.js";
 
 const MAX_BODY = 8 * 1024 * 1024;
@@ -49,6 +49,7 @@ export default {
       if (url.pathname === "/v1/report" && request.method === "POST") return await receive(request, env);
       if (url.pathname === "/v1/translate" && request.method === "POST") return await translate(request, env);
       if (url.pathname === "/v1/explain" && request.method === "POST") return await explain(request, env);
+      if (url.pathname === "/v1/explain/report" && request.method === "POST") return await reportExplanation(request, env);
       if (url.pathname === "/v1/config" && request.method === "GET") return clientConfig(env);
       if (url.pathname.startsWith("/v1/threads")) return await threads(request, env, url);
       if (url.pathname.startsWith("/v1/bot/")) return await bot(request, env, url);
@@ -323,6 +324,7 @@ async function admin(request, env, url) {
     return new Response("Sign in", { status: 401, headers: { "www-authenticate": 'Basic realm="Sweet Lyrics reports"' } });
   }
   const parts = url.pathname.split("/").filter(Boolean); // admin, r|p, id, ...
+  if (parts[1] === "ai") return page("AI answer complaints", await explainReportsPage(env, esc));
 
   if (parts.length === 1) {
     const kind = url.searchParams.get("kind");
@@ -348,7 +350,7 @@ async function admin(request, env, url) {
     ).join("");
     return page("Reports",
       `<p><a href="/admin">all</a> · <a href="/admin?kind=manual">manual</a> · <a href="/admin?kind=auto">auto</a> · ` +
-      STATUSES.map((s) => `<a href="/admin?status=${s}">${s}</a>`).join(" · ") + `</p>` +
+      STATUSES.map((s) => `<a href="/admin?status=${s}">${s}</a>`).join(" · ") + ` · <a href="/admin/ai">AI answer complaints</a></p>` +
       `<table><tr><th>When</th><th>Status</th><th>Kind</th><th>App</th><th>iOS</th><th>Device</th><th></th><th>Note / error</th></tr>${body}</table><p>${pager}</p>`);
   }
 

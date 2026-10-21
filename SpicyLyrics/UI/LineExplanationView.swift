@@ -6,6 +6,7 @@ import SwiftUI
 struct LineExplanationView: View {
     let request: ExplainRequest
     @Environment(PlayerModel.self) private var player
+    @Environment(AppSettings.self) private var settings
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
@@ -16,6 +17,12 @@ struct LineExplanationView: View {
     @State private var shown = false
     @State private var attempt = 0
     @State private var expandedArtist: String?
+    /// The complaint sent about the answer on screen.
+    @State private var complained: ExplanationComplaint?
+    @State private var complaining = false
+    @State private var askingComment = false
+    @State private var commentDraft = ""
+    @State private var complaintError: String?
     #if DEBUG
     @State private var detent: PresentationDetent = UserDefaults.standard.bool(forKey: "demoExplainLarge") ? .large : .medium
     #else
@@ -125,6 +132,8 @@ struct LineExplanationView: View {
         .onChange(of: mode) { _, _ in
             answer = LineExplainer.cached(current)
             failure = nil
+            complained = nil
+            complaintError = nil
             shown = answer != nil
         }
     }
@@ -198,9 +207,7 @@ struct LineExplanationView: View {
                 }
             }
 
-            Label(String(localized: "Объяснение написал ИИ, он может ошибаться."), systemImage: "sparkles")
-                .font(.footnote)
-                .foregroundStyle(.white.opacity(0.45))
+            footer(answer)
                 .cardReveal(shown, delay: cardsStart + 0.2 + Double(answer.notes.count + answer.artists.count) * 0.08)
         }
         .onAppear {
@@ -208,6 +215,114 @@ struct LineExplanationView: View {
             guard !shown else { return }
             DispatchQueue.main.async { shown = true }
         }
+    }
+
+    // MARK: Complaints
+
+    private func footer(_ answer: LineExplanation) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(String(localized: "Объяснение написал ИИ, он может ошибаться."), systemImage: "sparkles")
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.45))
+            Group {
+                if let complained {
+                    HStack(spacing: 10) {
+                        Label(String(localized: "Спасибо, учтём"), systemImage: "checkmark.circle.fill")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.green)
+                            .symbolEffect(.bounce, value: complained)
+                        Spacer(minLength: 0)
+                        if complained.replacesAnswer {
+                            Button {
+                                explainAgain()
+                            } label: {
+                                Label(String(localized: "Объяснить заново"), systemImage: "arrow.clockwise")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .glassButton()
+                        }
+                    }
+                    .transition(.blurReplace)
+                } else {
+                    Menu {
+                        ForEach(ExplanationComplaint.allCases) { reason in
+                            Button {
+                                choose(reason, about: answer)
+                            } label: {
+                                Label(reason.title, systemImage: reason.symbol)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if complaining {
+                                ProgressView().controlSize(.small).tint(.white)
+                            } else {
+                                Image(systemName: "flag")
+                            }
+                            Text(String(localized: "Пожаловаться на ответ"))
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .glassCapsule(.pressable)
+                        .contentShape(Capsule())
+                    }
+                    .disabled(complaining || answer.id == nil)
+                    .transition(.blurReplace)
+                }
+            }
+            .animation(.spring(response: 0.45, dampingFraction: 0.82), value: complained)
+            if let complaintError {
+                Text(complaintError)
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .sensoryFeedback(.success, trigger: complained) { _, new in new != nil }
+        .alert(String(localized: "Что не так с ответом?"), isPresented: $askingComment) {
+            TextField(String(localized: "Коротко опишите"), text: $commentDraft)
+            Button(String(localized: "Отправить")) { send(.other, comment: commentDraft, about: answer) }
+            Button(String(localized: "Отмена"), role: .cancel) {}
+        }
+    }
+
+    private func choose(_ reason: ExplanationComplaint, about answer: LineExplanation) {
+        if reason == .other {
+            commentDraft = ""
+            askingComment = true
+        } else {
+            send(reason, comment: "", about: answer)
+        }
+    }
+
+    private func send(_ reason: ExplanationComplaint, comment: String, about answer: LineExplanation) {
+        let request = current
+        complaining = true
+        complaintError = nil
+        Task {
+            defer { complaining = false }
+            do {
+                try await LineExplainer.report(answer, for: request, reason: reason,
+                                               comment: comment.trimmingCharacters(in: .whitespacesAndNewlines),
+                                               installID: settings.installID)
+                complained = reason
+            } catch {
+                complaintError = (error as? LocalizedError)?.errorDescription
+                    ?? String(localized: "Не получилось отправить. Попробуйте ещё раз.")
+            }
+        }
+    }
+
+    /// After a complaint that dropped the answer: ask for a new one.
+    private func explainAgain() {
+        withAnimation(.easeOut(duration: 0.25)) {
+            answer = nil
+            failure = nil
+            complained = nil
+        }
+        shown = false
+        attempt += 1
     }
 
     private func sectionTitle(_ title: String, symbol: String) -> some View {

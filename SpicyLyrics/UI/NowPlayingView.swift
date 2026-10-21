@@ -195,6 +195,7 @@ struct NowPlayingView: View {
         .sheet(item: $explainSong) { request in
             LineExplanationView(request: request)
                 .environment(player)
+                .environment(settings)
         }
         .sheet(isPresented: $showPicker) {
             TrackPickerView()

@@ -279,6 +279,7 @@ struct LyricsView: View {
         .sheet(item: $explainRequest) { request in
             LineExplanationView(request: request)
                 .environment(player)
+                .environment(settings)
         }
     }
 
