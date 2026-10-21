@@ -15,6 +15,8 @@ struct NowPlayingView: View {
     @State private var pickerDetent: PresentationDetent = .medium
     @State private var showSetupGuide = false
     @State private var showOwnLyrics = false
+    /// "О песне" from the "•••" menu.
+    @State private var explainSong: ExplainRequest?
     /// Big ⏭/⏮ flash after a swipe changes the track.
     @State private var skipFeedback: SkipDirection?
     @State private var skipCount = 0
@@ -112,8 +114,7 @@ struct NowPlayingView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .environment(\.colorScheme, .dark)
+                        .glassCapsule()
                         .padding(.horizontal, 24)
                         .frame(maxHeight: .infinity, alignment: .top)
                         .padding(.top, (chromeVisible && !landscape ? headerHeight : 0) + 8 + fpsBadgeClearance)
@@ -130,7 +131,7 @@ struct NowPlayingView: View {
                         .font(.system(size: 40))
                         .foregroundStyle(.white)
                         .padding(30)
-                        .background(.ultraThinMaterial, in: Circle())
+                        .glassCircle()
                         .transition(.scale(scale: 0.6).combined(with: .opacity))
                         .allowsHitTesting(false)
                 }
@@ -191,6 +192,10 @@ struct NowPlayingView: View {
             OwnLyricsView()
                 .environment(player)
         }
+        .sheet(item: $explainSong) { request in
+            LineExplanationView(request: request)
+                .environment(player)
+        }
         .sheet(isPresented: $showPicker) {
             TrackPickerView()
                 .environment(settings)
@@ -227,6 +232,15 @@ struct NowPlayingView: View {
             if MediaClock.scale != 1 {
                 for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
                     scene.windows.forEach { $0.layer.speed = Float(MediaClock.scale) }
+                }
+            }
+            // `-demoExplain song` or `-demoExplain <line number>`: the explanation sheet.
+            if let which = defaults.string(forKey: "demoExplain") {
+                try? await Task.sleep(for: .seconds(4))
+                if let track = player.track, case .loaded(let lyrics) = player.lyricsState {
+                    let words = lyrics.lines.filter { !$0.isInterlude }
+                    let line = Int(which).flatMap { words.indices.contains($0) ? words[$0] : nil }
+                    explainSong = ExplainRequest(track: track, lyrics: lyrics, line: line)
                 }
             }
             if defaults.bool(forKey: "demoPiP") {
@@ -370,7 +384,7 @@ struct NowPlayingView: View {
     private var backgroundOnly: Bool { isLandscape && lyricsHidden }
 
     private var canAutoHide: Bool {
-        guard chromeVisible, !tvMode, !showSettings, !showPicker, !showSetupGuide, !showOwnLyrics else { return false }
+        guard chromeVisible, !tvMode, !showSettings, !showPicker, !showSetupGuide, !showOwnLyrics, explainSong == nil else { return false }
         return lyricsOnly || backgroundOnly || (settings.autoHideControls && player.isPlaying && lyricsLoaded)
     }
 
@@ -674,7 +688,7 @@ struct NowPlayingView: View {
     /// Apple Music's "•••" button.
     private var moreMenu: some View {
         Menu {
-            // Three rows at most: with large system text a long menu barely fits and scrolls badly.
+            // Four rows at most: with large system text a long menu barely fits and scrolls badly.
             // The everyday actions sit side by side in one row.
             ControlGroup {
                 if player.supportsSpotifyFeatures {
@@ -697,6 +711,13 @@ struct NowPlayingView: View {
                         Label(pip.isActive ? String(localized: "Закрыть окно") : String(localized: "Поверх"),
                               systemImage: pip.isActive ? "pip.exit" : "pip.enter")
                     }
+                }
+            }
+            if let songRequest {
+                Button {
+                    explainSong = songRequest
+                } label: {
+                    Label(String(localized: "О чём песня"), systemImage: "sparkles")
                 }
             }
             Menu {
@@ -726,17 +747,19 @@ struct NowPlayingView: View {
                 Label(String(localized: "Настройки"), systemImage: "gearshape")
             }
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
-                .background(.white.opacity(0.18), in: Circle())
-                // 48 pt touch target around the 30 pt circle.
+            GlassIconLabel(systemName: "ellipsis", size: 36, weight: .bold)
+                // 48 pt touch target around the glass circle.
                 .frame(width: 48, height: 48)
                 .contentShape(Rectangle())
                 .hoverEffect(.highlight)
         }
         .simultaneousGesture(TapGesture().onEnded { showChrome() })
+    }
+
+    /// The whole song to explain, when it has words.
+    private var songRequest: ExplainRequest? {
+        guard let track = player.track, case .loaded(let lyrics) = player.lyricsState else { return nil }
+        return ExplainRequest(track: track, lyrics: lyrics)
     }
 
     private var spotifyURL: URL? {
@@ -805,8 +828,7 @@ struct NowPlayingView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 10)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .environment(\.colorScheme, .dark)
+                        .glassCapsule(.pressable)
                 }
                 .buttonStyle(SquishButtonStyle())
                 .padding(.bottom, bottomInset + 12)
@@ -898,7 +920,7 @@ struct NowPlayingView: View {
                         .font(.footnote.weight(.semibold))
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        .glassCapsule()
                         .padding(.top, topInset + 8 + fpsBadgeClearance)
                         .transition(.opacity)
                 }
@@ -953,6 +975,7 @@ struct NowPlayingView: View {
         VStack(spacing: 16) {
             Image(systemName: "music.quarternote.3")
                 .font(.system(size: 44))
+                .symbolEffect(.pulse, options: .repeating)
             Text(player.statusMessage ?? (player.supportsSpotifyFeatures ? String(localized: "Включите музыку в Spotify") : String(localized: "Включите музыку в Apple Music")))
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
@@ -962,21 +985,18 @@ struct NowPlayingView: View {
                 } label: {
                     Label(String(localized: "Подключить свой Client ID"), systemImage: "key.horizontal")
                         .font(.headline)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 10)
-                        .background(Color(red: 0.12, green: 0.84, blue: 0.38), in: Capsule())
-                        .foregroundStyle(.black)
                 }
+                .glassButton(prominent: true, tint: Color(red: 0.12, green: 0.84, blue: 0.38))
+                .controlSize(.large)
             } else {
                 Button {
                     if let url = spotifyURL { UIApplication.shared.open(url) }
                 } label: {
                     Label(player.supportsSpotifyFeatures ? String(localized: "Открыть Spotify") : String(localized: "Открыть Музыку"), systemImage: "arrow.up.forward.app")
                         .font(.headline)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 10)
-                        .background(.white.opacity(0.15), in: Capsule())
                 }
+                .glassButton()
+                .controlSize(.large)
             }
         }
         .foregroundStyle(.white)
@@ -1018,22 +1038,18 @@ private struct NowPlayingAlerts: ViewModifier {
     }
 }
 
-/// Placeholder bars while lyrics load (the extension's LyricsSkeleton).
+/// Placeholder bars while lyrics load (the extension's LyricsSkeleton), a light sweeping over them.
 private struct LyricsSkeleton: View {
-    @State private var pulse = false
-
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             ForEach(0..<6, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(.white.opacity(pulse ? 0.16 : 0.08))
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(.white.opacity(0.1))
                     .frame(width: [260, 200, 300, 170, 240, 210][i], height: 30)
             }
         }
+        .shimmer()
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(24)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
-        }
     }
 }

@@ -53,7 +53,7 @@ struct TrackPickerView: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background { ArtworkBackdrop() }
+        .glassSheetBackground()
         .overlay(alignment: .bottom) {
             if let queuedTitle {
                 Label(String(localized: "В очереди: \(queuedTitle)"), systemImage: "text.badge.checkmark")
@@ -61,7 +61,7 @@ struct TrackPickerView: View {
                     .lineLimit(1)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
-                    .background(.ultraThinMaterial, in: Capsule())
+                    .glassCapsule()
                     .padding(.horizontal, 24)
                     .padding(.bottom, 16)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -131,10 +131,7 @@ struct TrackPickerView: View {
 
     private func roundButton(_ icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .bold))
-                .frame(width: 34, height: 34)
-                .background(.white.opacity(0.14), in: Circle())
+            GlassIconLabel(systemName: icon, size: 36, weight: .bold)
         }
         .buttonStyle(SquishButtonStyle(scale: 0.88))
     }
@@ -161,7 +158,7 @@ struct TrackPickerView: View {
             }
         }
         .padding(4)
-        .background(.white.opacity(0.1), in: Capsule())
+        .glassCapsule()
         .padding(.horizontal, 16)
         .padding(.bottom, 10)
         .sensoryFeedback(.selection, trigger: tab)
@@ -293,8 +290,8 @@ struct TrackPickerView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(.white.opacity(0.12), in: Capsule())
+        .padding(.vertical, 10)
+        .glassCapsule()
     }
 
     private var reloginPrompt: some View {
@@ -315,7 +312,7 @@ struct TrackPickerView: View {
                     }
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .glassButton(prominent: true, tint: settings.appTheme.accent)
         }
         .padding(32)
     }
@@ -494,11 +491,7 @@ private struct NowPlayingCard: View {
             EqualizerBars(playing: playing, color: accent)
         }
         .padding(12)
-        .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(.white.opacity(0.16), lineWidth: 0.5)
-        }
+        .glassCard(radius: 22)
     }
 }
 

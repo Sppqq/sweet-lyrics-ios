@@ -1,4 +1,4 @@
-# Report collector and translation cache (Cloudflare Worker)
+# Report collector, translation cache and line explanations (Cloudflare Worker)
 
 Receives the reports the app sends (Settings → Error Reports): a note, up to three photos and the sync
 log. Text goes to D1, photos to R2. Every report is a thread: the developer (or the bot) answers, the
@@ -16,6 +16,13 @@ status change (nightly cron), so a thread still being talked in stays.
   has had translated costs no request upstream. Only uncached lines count against a network's limit (60 000
   characters an hour); over it, the cached lines still come back (`limited: true`). Lines nobody asked for in
   180 days are dropped by the nightly cron.
+- `POST /v1/explain`: "what does this line mean". JSON `{"track": {"title", "artists": [..], "album"}, "lines": [the
+  whole text], "index": 4, "language": "ru"}` (`index: null` explains the whole song) → `{"summary", "meaning",
+  "notes": [{"phrase", "note"}], "artists": [{"name", "summary", "description", "url"}], "cached"}`. The model
+  (`mercury-3` from [Inception](https://docs.inceptionlabs.ai/), secret `INCEPTION_API_KEY`) gets the whole song with
+  the line marked and the artists' Wikipedia intros (the app's language when that wiki has the page, else English;
+  kept in `artist_bios` for 30 days). Answers are kept in `explanations`, shared by all installs; 40 uncached answers
+  per network per hour. Without the secret the endpoint answers 503 and the app says explanations are unavailable.
 - `GET /v1/config`: the app's remote config (`RemoteConfig.swift`): lyrics timeout, queue look-ahead, cache
   lifetimes, a floor for Web API polling, and kill switches for auto reports and Canvas. The defaults live in
   `CLIENT_CONFIG` in `src/index.js`; to change them for every install without a release, set the `CLIENT_CONFIG`
@@ -38,17 +45,21 @@ npx wrangler d1 execute sweet-lyrics-reports --remote --file=schema.sql
 npx wrangler secret put ADMIN_TOKEN                  # the admin password
 npx wrangler secret put IP_SALT                      # any long random string, never changed
 npx wrangler secret put BOT_TOKEN                    # the report bot's password (see below)
+npx wrangler secret put INCEPTION_API_KEY            # Mercury, for /v1/explain
 npx wrangler deploy
 ```
 
 `schema.sql` is the whole current schema: run it alone on a new database. `migrations/` only brings a
 database made before threads existed up to date (`wrangler d1 execute … --file=migrations/0001_threads.sql`);
 never run it on a database made from the current `schema.sql` (the columns already exist).
-`migrations/0002_translations.sql` adds the translation cache and is safe on any database:
+`migrations/0002_translations.sql` (the translation cache) and `0003_explanations.sql` (explanations) are safe on any database:
 
 ```sh
 npx wrangler d1 execute sweet-lyrics-reports --remote --file=migrations/0002_translations.sql
+npx wrangler d1 execute sweet-lyrics-reports --remote --file=migrations/0003_explanations.sql
 ```
+
+For local runs put the key in `.dev.vars` (`INCEPTION_API_KEY=...`, git-ignored).
 
 After the first setup, GitHub Actions deploys the Worker (`.github/workflows/cloudflare-worker.yml`):
 pull requests that touch `cloudflare/` or `server/report-bot/` get a check (syntax, report bot tests,

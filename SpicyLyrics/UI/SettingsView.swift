@@ -215,16 +215,8 @@ private struct QuickTile: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(isOn ? AnyShapeStyle(LinearGradient(colors: [tint.opacity(0.95), tint.opacity(0.62)],
-                                                              startPoint: .topLeading, endPoint: .bottomTrailing))
-                               : AnyShapeStyle(Color.white.opacity(0.09)))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(.white.opacity(isOn ? 0.28 : 0.1), lineWidth: 0.5)
-            }
+            .glassCard(isOn ? .tinted(tint.opacity(0.85)) : .pressable, radius: 18)
+            .animation(.spring(response: 0.38, dampingFraction: 0.74), value: isOn)
         }
         .buttonStyle(SquishButtonStyle())
         .sensoryFeedback(.selection, trigger: isOn)

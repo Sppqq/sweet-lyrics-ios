@@ -68,10 +68,11 @@ struct OnboardingView: View {
                             Text(String(localized: "Продолжить с Apple Music"))
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(.white, in: Capsule())
+                                .padding(.vertical, 4)
                                 .foregroundStyle(.black)
                         }
+                        .glassButton(prominent: true, tint: .white)
+                        .controlSize(.large)
                         .disabled(busy)
                     } else {
                         if canLogIn {
@@ -84,10 +85,11 @@ struct OnboardingView: View {
                                   systemImage: "key.horizontal")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(.white.opacity(canLogIn ? 0.12 : 0.9), in: Capsule())
+                                .padding(.vertical, 4)
                                 .foregroundStyle(canLogIn ? .white : .black)
                         }
+                        .glassButton(prominent: !canLogIn, tint: canLogIn ? nil : .white)
+                        .controlSize(.large)
                     }
                 }
                 .padding(.horizontal, 24)
@@ -111,10 +113,11 @@ struct OnboardingView: View {
                     .font(.headline)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(Color(red: 0.12, green: 0.84, blue: 0.38), in: Capsule())
+            .padding(.vertical, 4)
             .foregroundStyle(.black)
         }
+        .glassButton(prominent: true, tint: Color(red: 0.12, green: 0.84, blue: 0.38))
+        .controlSize(.large)
         .disabled(busy)
     }
 

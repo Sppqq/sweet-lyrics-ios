@@ -20,6 +20,10 @@ struct LyricsNoticeView: View {
         VStack(spacing: 14) {
             Image(systemName: notice.icon)
                 .font(.system(size: 40))
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 84, height: 84)
+                .glassCircle()
+                .padding(.bottom, 4)
             Text(notice.title)
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
@@ -62,8 +66,7 @@ struct LyricsNoticeView: View {
             HStack(spacing: 10) { buttons }
             VStack(spacing: 10) { buttons }
         }
-        .buttonStyle(.bordered)
-        .tint(.white)
+        .glassButton()
     }
 
     @ViewBuilder
@@ -74,7 +77,7 @@ struct LyricsNoticeView: View {
             } label: {
                 Label(String(localized: "Повторить"), systemImage: "arrow.clockwise")
             }
-            .buttonStyle(.borderedProminent)
+            .glassButton(prominent: true, tint: .white)
             .foregroundStyle(.black)
         }
         if notice == .localTrack, let onOwnLyrics {

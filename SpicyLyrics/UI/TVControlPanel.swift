@@ -75,7 +75,8 @@ struct TVControlPanel: View {
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .buttonStyle(PanelButtonStyle())
+                .glassButton()
+                .controlSize(.large)
                 .staged(4, appeared)
 
                 Text(String(localized: "Всё сохраняется и применится, когда телевизор подключится в следующий раз."))
@@ -123,9 +124,9 @@ struct TVControlPanel: View {
                         .animation(.easeOut(duration: 1.7).delay(0.2 + Double(ring) * 0.35), value: appeared)
                 }
                 Circle()
-                    .fill(.white.opacity(0.14))
+                    .fill(.clear)
                     .frame(width: 64, height: 64)
-                    .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 1))
+                    .glassCircle()
                     .shadow(color: .white.opacity(0.25), radius: 18)
                 Image(systemName: "airplay.video")
                     .font(.system(size: 27, weight: .semibold))
@@ -188,8 +189,8 @@ struct TVControlPanel: View {
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .bold))
-                .frame(width: 30, height: 30)
-                .background(.white.opacity(0.15), in: Circle())
+                .frame(width: 32, height: 32)
+                .glassCircle(.pressable)
         }
         .buttonStyle(SquishButtonStyle(scale: 0.85))
         .buttonRepeatBehavior(.enabled)
@@ -209,8 +210,7 @@ struct TVControlPanel: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white.opacity(0.1), lineWidth: 1))
+        .glassCard(radius: 24)
     }
 }
 
@@ -239,18 +239,6 @@ private struct ValueSlider: View {
                 Image(systemName: maxIcon).font(.body).foregroundStyle(.white.opacity(0.6))
             }
         }
-    }
-}
-
-private struct PanelButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(.vertical, 13)
-            .padding(.horizontal, 10)
-            .background(.white.opacity(configuration.isPressed ? 0.24 : 0.15),
-                        in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.65), value: configuration.isPressed)
     }
 }
 

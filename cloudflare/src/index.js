@@ -4,8 +4,10 @@
 // Status: open → in_progress → closed; a reply from the sender reopens a closed report.
 // /admin is a small page for reading, answering and closing them.
 // /v1/translate translates lyric lines for the app, with a cache every install shares (translate.js).
+// /v1/explain explains a lyric line or a whole song with Mercury (explain.js).
 // /v1/config serves the app's request cadence, timeouts and cache lifetimes (RemoteConfig.swift).
 
+import { explain, pruneExplanations } from "./explain.js";
 import { pruneTranslations, translate } from "./translate.js";
 
 const MAX_BODY = 8 * 1024 * 1024;
@@ -46,6 +48,7 @@ export default {
     try {
       if (url.pathname === "/v1/report" && request.method === "POST") return await receive(request, env);
       if (url.pathname === "/v1/translate" && request.method === "POST") return await translate(request, env);
+      if (url.pathname === "/v1/explain" && request.method === "POST") return await explain(request, env);
       if (url.pathname === "/v1/config" && request.method === "GET") return clientConfig(env);
       if (url.pathname.startsWith("/v1/threads")) return await threads(request, env, url);
       if (url.pathname.startsWith("/v1/bot/")) return await bot(request, env, url);
@@ -72,6 +75,7 @@ export default {
       await env.DB.prepare("DELETE FROM messages WHERE report_id = ?").bind(row.id).run();
     }
     await pruneTranslations(env);
+    await pruneExplanations(env);
   },
 };
 

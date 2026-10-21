@@ -41,6 +41,8 @@ struct LyricsView: View {
     /// context menu on the line itself was rebuilt every frame, and its buttons did nothing.
     @State private var menuLine: PreparedLine?
     @State private var menuTick = 0
+    /// "Что это значит?" from the line's menu.
+    @State private var explainRequest: ExplainRequest?
 
     init(lyrics: PreparedLyrics, player: PlayerModel, settings: AppSettings,
          topInset: CGFloat = 0, bottomInset: CGFloat = 0, horizontalPadding: CGFloat = 24,
@@ -249,6 +251,10 @@ struct LyricsView: View {
         .confirmationDialog(menuTitle, isPresented: menuShown, titleVisibility: .visible, presenting: menuLine) { line in
             lineActions(line)
         }
+        .sheet(item: $explainRequest) { request in
+            LineExplanationView(request: request)
+                .environment(player)
+        }
     }
 
     private var menuShown: Binding<Bool> {
@@ -284,8 +290,7 @@ struct LyricsView: View {
                 .foregroundStyle(.white)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                .background(.ultraThinMaterial, in: Capsule())
-                .environment(\.colorScheme, .dark)
+                .glassCapsule(.pressable)
         }
         .buttonStyle(.plain)
     }
@@ -363,6 +368,11 @@ extension LyricsView {
     /// Long press on a line: what can be done with it.
     @ViewBuilder
     func lineActions(_ line: PreparedLine) -> some View {
+        if let track = player.track, let request = ExplainRequest(track: track, lyrics: shown, line: line) {
+            Button(String(localized: "Что это значит?")) {
+                explainRequest = request
+            }
+        }
         if shown.kind != .static {
             Button(String(localized: "Перемотать сюда")) {
                 resumeAutoScrollAt = .distantPast

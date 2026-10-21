@@ -169,8 +169,7 @@ struct ReportThreadView: View {
                 .textSelection(.enabled)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
-                .background(fromDeveloper ? Color.white.opacity(0.12) : Color.accentColor.opacity(0.35),
-                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .glassCard(fromDeveloper ? .regular : .tinted(Color.accentColor.opacity(0.6), interactive: false), radius: 18)
             Text(date.formatted(date: .omitted, time: .shortened))
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -189,7 +188,7 @@ struct ReportThreadView: View {
                     .focused($focused)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .glassCard(radius: 20)
                 Button {
                     Task { await send() }
                 } label: {
@@ -205,7 +204,7 @@ struct ReportThreadView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .legacyBarMaterial()
     }
 
     private func send() async {

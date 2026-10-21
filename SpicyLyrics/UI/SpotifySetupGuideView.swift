@@ -81,10 +81,11 @@ struct SpotifySetupGuideView: View {
                                 .font(.headline)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color(red: 0.12, green: 0.84, blue: 0.38), in: Capsule())
+                        .padding(.vertical, 4)
                         .foregroundStyle(.black)
                     }
+                    .glassButton(prominent: true, tint: Color(red: 0.12, green: 0.84, blue: 0.38))
+                    .controlSize(.large)
                     .disabled(busy || !AppSettings.isValidClientID(draft))
                 }
 
@@ -116,7 +117,7 @@ struct SpotifySetupGuideView: View {
         .font(.callout)
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .glassCard(radius: 18)
     }
 
     private var redirectURIBox: some View {
@@ -141,7 +142,7 @@ struct SpotifySetupGuideView: View {
             }
         }
         .padding(12)
-        .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .glassCard(radius: 14)
     }
 
     private var clientIDField: some View {
@@ -161,7 +162,7 @@ struct SpotifySetupGuideView: View {
                 }
             }
             .padding(12)
-            .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .glassCard(radius: 14)
 
             if !draft.isEmpty && !AppSettings.isValidClientID(draft) {
                 Text(String(localized: "Client ID — это 32 символа из цифр и букв a–f. Проверьте, что скопирован именно Client ID, а не Client secret."))
@@ -186,7 +187,7 @@ struct SpotifySetupGuideView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .glassCard(radius: 18)
     }
 
     private func problem(_ title: String, _ fix: String) -> some View {
@@ -200,8 +201,8 @@ struct SpotifySetupGuideView: View {
         HStack(alignment: .top, spacing: 12) {
             Text("\(number)")
                 .font(.headline)
-                .frame(width: 30, height: 30)
-                .background(Color(red: 0.12, green: 0.84, blue: 0.38).opacity(0.85), in: Circle())
+                .frame(width: 32, height: 32)
+                .glassCircle(.tinted(Color(red: 0.12, green: 0.84, blue: 0.38).opacity(0.85), interactive: false))
                 .foregroundStyle(.black)
             VStack(alignment: .leading, spacing: 10) {
                 Text(title).font(.title3.weight(.semibold))
@@ -223,10 +224,8 @@ struct SpotifySetupGuideView: View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
                 .font(.callout.weight(.semibold))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(.white.opacity(0.14), in: Capsule())
         }
+        .glassButton()
     }
 
     // MARK: Sign in
