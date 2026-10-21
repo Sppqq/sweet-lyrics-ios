@@ -82,6 +82,8 @@ final class SpotifyAppRemote: NSObject {
         queryTask = nil
         connectTimeout?.cancel()
         connectTimeout = nil
+        wakeTimeout?.cancel()
+        wakeTimeout = nil
         if remote?.isConnected == true { remote?.disconnect() }
         player?.setRemoteConnected(false)
         status = .off
@@ -114,6 +116,10 @@ final class SpotifyAppRemote: NSObject {
             self.status = .unavailable
             self.lastError = String(localized: "Spotify не вернул подтверждение. Попробуйте ещё раз.")
             SyncLog.shared.add("remote", "Spotify never came back with a token")
+            // A missed wake callback must not strand App Remote in `.unavailable`. The login
+            // may already have the app-remote scope, so try the normal connection path again;
+            // if not, `connect()` will surface `.needsLogin` as usual.
+            self.scheduleRetry(after: 2)
         }
         remote.authorizeAndPlayURI("") { [weak self] success in
             Task { @MainActor in
