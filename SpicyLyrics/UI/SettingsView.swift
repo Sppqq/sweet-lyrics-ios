@@ -495,7 +495,7 @@ private struct ExperimentsSettings: View {
             Section {
                 Toggle(String(localized: "Выезжающий бэк-вокал"), isOn: $settings.backgroundLinePop)
             } footer: {
-                Text(String(localized: "Строки бэк-вокала спрятаны под своей строкой, пока её не начнут петь, потом выезжают из-под неё, а строки ниже расступаются. Когда обе спеты, бэк-вокал прячется обратно."))
+                Text(String(localized: "Строки бэк-вокала спрятаны под своей строкой, пока её не начнут петь, потом выезжают из-под неё, а строки ниже расступаются. Когда обе спеты, бэк-вокал прячется обратно. Работает только в Simple Lyrics Mode с обновлённым Simple Lyrics."))
             }
 
             Section {

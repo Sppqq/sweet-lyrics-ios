@@ -71,8 +71,10 @@ struct LyricsView: View {
 
     private var animatorOptions: LyricsAnimator.Options {
         LyricsAnimator.Options(keepOverlapping: settings.keepOverlappingLines,
-                               // Reduced motion: background vocals simply stay out.
-                               popOut: settings.backgroundLinePop && !UIAccessibility.isReduceMotionEnabled)
+                               // Only in the refreshed layout (6.4.70); it animates the same with
+                               // reduced motion on.
+                               popOut: settings.backgroundLinePop && settings.simpleLyricsMode
+                                   && settings.refreshedSimpleLyrics)
     }
 
     /// Always the animator's copy, so line indices and visuals can never disagree.
