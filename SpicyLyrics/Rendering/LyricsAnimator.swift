@@ -391,10 +391,18 @@ final class LyricsAnimator {
             presentationLead = 0
             return
         }
-        let smoothed = frameTime.map { $0 + (dt - $0) * (dt > $0 ? 0.3 : 0.08) } ?? dt
+        // A lone hitch (one 200 ms frame) is no lower frame rate: counted whole, it pushed the
+        // lead up by ~0.1 s, and the slow decay kept the words that far ahead of the sound for
+        // a second after the hitch. A frame counts as at most three frames' worth here.
+        let sample = min(dt, expected * 3)
+        let smoothed = frameTime.map { $0 + (sample - $0) * (sample > $0 ? 0.3 : 0.08) } ?? sample
         frameTime = smoothed
         presentationLead = clamp(1.5 * (smoothed - expected * 1.1), 0, 0.15)
     }
+
+    /// No frame for this long: the lyrics were not on screen (or the phone stalled), so the
+    /// next step snaps to the clock instead of animating.
+    private static let resumeGap: Double = 0.4
 
     /// The next step jumps straight to the clock (it was just checked and may have moved).
     func snapNext() { lastPosition = nil }
@@ -424,10 +432,11 @@ final class LyricsAnimator {
         let position = position + presentationLead + (simple ? Curves.simplePositionOffset : 0)
         // No frames for a while (the app or the floating window was hidden, the phone stalled):
         // whatever the springs were doing is stale, so snap like after a seek.
-        let resumed = dt > 0.4
+        let resumed = dt > Self.resumeGap
         // The springs are solved exactly for any step, so a slow frame takes its whole length:
-        // capping it (it used to stop at 1/15 s) made them lag further behind the lower the fps.
-        dt = min(dt, 0.25)
+        // capping it (it used to stop at 1/15 s, then 0.25 s) left them behind after every
+        // hitch between the cap and the snap. Anything longer snaps anyway.
+        dt = min(dt, Self.resumeGap)
         // A seek: snap everything instead of animating across the whole song.
         let jumped = resumed || lastPosition.map { abs(position - $0) > 1.5 } ?? true
         lastFrame = now

@@ -83,7 +83,8 @@ struct NowPlayingView: View {
                     dim: settings.backgroundDim,
                     speed: settings.backgroundSpeed,
                     blur: settings.backgroundBlur,
-                    saturation: settings.backgroundSaturation
+                    saturation: settings.backgroundSaturation,
+                    covered: showVisualizer
                 )
 
                 // Experimental: a visualizer where the lyrics were hidden.

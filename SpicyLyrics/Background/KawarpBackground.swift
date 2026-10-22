@@ -139,7 +139,8 @@ final class KawarpSurface: ShaderSurface {
         updatePausing()
     }
 
-    /// Frames only while something moves: always when animated (30 fps playing, 20 paused),
+    /// Frames only while something moves: always when animated (30 fps playing, 12 paused: at a
+    /// tenth of the speed nothing moves enough to need more),
     /// otherwise just while a new cover fades in.
     private func updatePausing() {
         let moving = (animated || transitionStart != nil) && window != nil
@@ -147,7 +148,7 @@ final class KawarpSurface: ShaderSurface {
             isPaused = !moving
             if moving { resetClock() }
         }
-        let fps = playing || transitionStart != nil ? 30 : 20
+        let fps = playing || transitionStart != nil ? 30 : 12
         if preferredFramesPerSecond != fps { preferredFramesPerSecond = fps }
     }
 

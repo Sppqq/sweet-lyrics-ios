@@ -35,6 +35,11 @@ struct LyricsView: View {
     @State private var showResetSize = false
     @State private var resetSizeTick = 0
     @State private var frameCounter = FrameRateCounter()
+    /// Notices when the phone can't keep up with the frame rate asked for.
+    @State private var governor = FrameGovernor()
+    /// The phone kept missing frames at the full rate: 30 fps for a while. Even 30 fps look
+    /// smoother than 45 uneven ones, and the work saved is heat not made.
+    @State private var throttled = false
     /// Which lines are far enough off screen to skip drawing.
     @State private var culling = LineCulling()
     /// The line held down: its actions show in a menu over the lyrics, outside the per-frame
@@ -123,7 +128,7 @@ struct LyricsView: View {
         var target = max(15, settings.lyricsFrameRate)
         // Line by line, only a slow sweep moves between lines (the scroll is Core Animation's
         // own, at the screen's rate): 30 fps looks the same and costs half.
-        if reduced || lowFrameRate || shown.kind == .line { target = min(30, target) }
+        if reduced || lowFrameRate || throttled || shown.kind == .line { target = min(30, target) }
         return 1 / target
     }
 
@@ -136,6 +141,10 @@ struct LyricsView: View {
                     TimelineView(.animation(minimumInterval: frameInterval)) { _ in
                         let now = MediaClock.now()
                         let _ = settings.showLyricsFPS ? frameCounter.tick(now) : ()
+                        let _ = governor.note(now, interval: frameInterval, throttled: throttled) { value in
+                            // Not during the update: the timeline's schedule changes with it.
+                            DispatchQueue.main.async { throttled = value }
+                        }
                         let _ = animator.step(position: player.position(at: now) + clockOffset, now: now,
                                               blurEnabled: settings.blurInactiveLines && !userScrolling && !reduced,
                                               frameInterval: frameInterval, options: animatorOptions)
@@ -447,6 +456,55 @@ private struct LineSpot: Equatable {
     var near: Bool
     /// At least partly in the part of the screen the header and controls leave free.
     var touchable: Bool
+}
+
+/// Watches the frames actually drawn. Two seconds well under the rate asked for (a busy or hot
+/// phone) turn the throttle on; it comes off after half a minute to try the full rate again.
+/// Not observable on purpose: it is fed from inside the per-frame timeline.
+@MainActor
+private final class FrameGovernor {
+    private static let window: Double = 2
+    private static let holdOff: Double = 30
+    private var windowStart: CFTimeInterval = 0
+    private var frames = 0
+    private var interval: Double = 0
+    private var lastFrame: CFTimeInterval = 0
+    private var throttledAt: CFTimeInterval = 0
+
+    func note(_ now: CFTimeInterval, interval: Double, throttled: Bool, set: (Bool) -> Void) {
+        if throttled {
+            if throttledAt == 0 { throttledAt = now }
+            if now - throttledAt > Self.holdOff {
+                throttledAt = 0
+                restart(now, interval)
+                set(false)
+            }
+            return
+        }
+        throttledAt = 0
+        // A pause in the frames (paused, in the background) or a new rate: start counting over.
+        if interval != self.interval || now - lastFrame > 0.4 {
+            restart(now, interval)
+            return
+        }
+        lastFrame = now
+        frames += 1
+        let elapsed = now - windowStart
+        guard elapsed >= Self.window else { return }
+        // The screen can't show more than its own rate: 120 asked on a 60 Hz screen is 60.
+        let asked = min(1 / interval, Double(UIScreen.main.maximumFramesPerSecond))
+        let drawn = Double(frames) / elapsed
+        restart(now, interval)
+        // Only rates above 30 can be lowered; under 75 % of them is not a one-off hitch.
+        if asked > 31, drawn < asked * 0.75 { set(true) }
+    }
+
+    private func restart(_ now: CFTimeInterval, _ interval: Double) {
+        self.interval = interval
+        windowStart = now
+        lastFrame = now
+        frames = 0
+    }
 }
 
 /// What the lines' heights depend on besides the text: when it changes, the remembered heights

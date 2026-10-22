@@ -27,7 +27,11 @@ struct DynamicBackground: View {
     var blur: Double = 1
     /// × the default cover saturation.
     var saturation: Double = 1
+    /// Something opaque is drawn over the whole background (the visualizer): nothing here moves.
+    var covered = false
     @Environment(AppSettings.self) private var settings
+    /// The Canvas video's first frame is on screen, hiding the cover under it.
+    @State private var canvasReady = false
 
     var body: some View {
         if let gradient = settings.appTheme.gradient {
@@ -42,8 +46,14 @@ struct DynamicBackground: View {
 
     private var style: BackgroundStyle { settings.background }
 
-    /// The cover keeps flowing under the other styles until their picture is there.
-    private var coverMoves: Bool { animated && style != .cover }
+    /// The cover keeps flowing under the other styles until their picture is there; under an
+    /// opaque picture (a playing Canvas, the artist's photo, the visualizer) it stops: nobody
+    /// sees it, and the warp was 30 frames a second of GPU work for nothing.
+    private var coverMoves: Bool { animated && style != .cover && !coverHidden }
+
+    private var coverHidden: Bool {
+        covered || (canvasShown && canvasReady) || (style == .artist && artistImage != nil && image != nil)
+    }
 
     /// A video needs more darkening than a blurred cover for white text to read on it.
     private var canvasShown: Bool { style == .canvas && canvasURL != nil && image != nil }
@@ -58,22 +68,16 @@ struct DynamicBackground: View {
                 CoverBlobs(image: image, imageID: imageID, animated: coverMoves, speed: speed, blur: blur, saturation: saturation)
             }
             if style == .artist, let artistImage, image != nil {
-                // `Image Blur`: the photo stays recognisable, just soft.
-                Color.clear
-                    .overlay {
-                        Image(uiImage: artistImage)
-                            .resizable()
-                            .scaledToFill()
-                            .blur(radius: 18 * blur, opaque: true)
-                            .saturation(saturation)
-                    }
-                    .clipped()
+                // `Image Blur`: the photo stays recognisable, just soft. Blurred once, off the
+                // main thread: a live full-screen blur was redone on every frame of the lyrics.
+                ArtistPhotoBackground(image: artistImage, blur: blur, saturation: saturation)
                     .transition(.opacity)
             }
             if canvasShown, let canvasURL {
-                CanvasVideoView(url: canvasURL, playing: playing)
+                CanvasVideoView(url: canvasURL, playing: playing) { ready in canvasReady = ready }
                     .saturation(saturation)
                     .transition(.opacity)
+                    .onDisappear { canvasReady = false }
             }
             Color.black.opacity(canvasShown ? min(0.85, dim + 0.15) : dim)
         }
@@ -81,6 +85,62 @@ struct DynamicBackground: View {
         .animation(.easeInOut(duration: 0.8), value: canvasURL)
         .ignoresSafeArea()
         .allowsHitTesting(false)
+    }
+}
+
+/// The artist's photo, blurred and saturated once per photo and setting (`Image Blur`).
+private struct ArtistPhotoBackground: View {
+    let image: UIImage
+    let blur: Double
+    let saturation: Double
+    @State private var rendered: UIImage?
+
+    private struct Key: Equatable {
+        let image: ObjectIdentifier
+        let blur: Double
+        let saturation: Double
+    }
+
+    var body: some View {
+        Color.clear
+            .overlay {
+                if let rendered {
+                    Image(uiImage: rendered)
+                        .resizable()
+                        .interpolation(.medium)
+                        .scaledToFill()
+                }
+            }
+            .clipped()
+            .animation(.easeInOut(duration: 0.4), value: rendered)
+            .task(id: Key(image: ObjectIdentifier(image), blur: blur, saturation: saturation)) {
+                let image = image, blur = blur, saturation = saturation
+                let result = await Task.detached(priority: .utility) {
+                    Self.render(image, blur: blur, saturation: saturation)
+                }.value
+                guard !Task.isCancelled else { return }
+                rendered = result ?? image
+            }
+    }
+
+    /// The blur was 18 pt × the setting on the full photo. A small copy blurred by the same
+    /// fraction of its size, scaled up, looks the same at a fraction of the work.
+    nonisolated private static let context = CIContext(options: [.cacheIntermediates: false])
+
+    nonisolated static func render(_ image: UIImage, blur: Double, saturation: Double) -> UIImage? {
+        let side: CGFloat = 320
+        guard let cgImage = image.downscaled(to: side).cgImage else { return nil }
+        let input = CIImage(cgImage: cgImage)
+        let extent = input.extent
+        // Filling a phone upright, a square photo is shown about 850 pt across: 18 pt of that,
+        // in this copy's pixels.
+        let sigma = 18 * max(0, blur) * Double(max(extent.width, extent.height)) / 850
+        var output = input.applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: saturation])
+        if sigma > 0.1 {
+            output = output.clampedToExtent().applyingGaussianBlur(sigma: sigma).cropped(to: extent)
+        }
+        guard let result = context.createCGImage(output, from: extent) else { return nil }
+        return UIImage(cgImage: result)
     }
 }
 

@@ -209,6 +209,8 @@ final class LyricsPictureInPicture: NSObject {
         timer = nil
         guard fps > 0 else { return }
         let timer = Timer(timeInterval: 1 / fps, repeats: true) { [weak self] _ in self?.renderFrame() }
+        // The idle trickle (and a paused window) need no precision: let iOS bundle the wake-ups.
+        if fps <= 5 { timer.tolerance = 0.2 / fps }
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }

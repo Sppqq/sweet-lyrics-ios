@@ -386,6 +386,9 @@ final class SpotifyAppRemote: NSObject {
         var event: Bool
         /// Queries: how long the answer took (`measuredAt` is only this exact).
         var roundTrip: Double
+        /// Events: how long the main thread had been busy when it got to this one. It may have
+        /// been sent that much earlier than `measuredAt` says.
+        var mainThreadDelay: Double = 0
 
         init(_ state: SPTAppRemotePlayerState, at time: CFTimeInterval, event: Bool, roundTrip: Double = 0) {
             uri = state.track.uri
@@ -429,7 +432,8 @@ extension SpotifyAppRemote: SPTAppRemoteDelegate {
 
 extension SpotifyAppRemote: SPTAppRemotePlayerStateDelegate {
     nonisolated func playerStateDidChange(_ playerState: SPTAppRemotePlayerState) {
-        let sample = Sample(playerState, at: CACurrentMediaTime(), event: true)
+        var sample = Sample(playerState, at: CACurrentMediaTime(), event: true)
+        sample.mainThreadDelay = MainThreadPulse.busyFor
         nonisolated(unsafe) let track = playerState.track
         Task { @MainActor in
             self.player?.applyRemote(sample)

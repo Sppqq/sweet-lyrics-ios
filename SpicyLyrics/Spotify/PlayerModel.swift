@@ -232,6 +232,8 @@ final class PlayerModel {
     }
     /// App Remote answers slower than this went through a busy main thread: not trusted.
     private static let remoteMaxRoundTrip: Double = 0.25
+    /// An App Remote event the main thread got to this late is checked with a query right after.
+    private static let lateEventDelay: Double = 0.1
     /// A song counts as freshly started when App Remote first reports it this early.
     private static let leadMaxStart: Double = 1.5
     /// Events this long after the start are no longer part of it: they re-base Spotify's position.
@@ -822,6 +824,15 @@ final class PlayerModel {
                 // The timeline may have jumped (a stall, a seek): the next query is not
                 // comparable with the one before, or it would look like queries stopped moving.
                 lastRemoteQuery = nil
+            }
+            // It came through a frozen main thread: it may be that much older than it looks, and
+            // the clock just set from it that much behind. A query measures its own round trip.
+            if !sample.paused, sample.mainThreadDelay > Self.lateEventDelay {
+                decision += ", came \(sample.mainThreadDelay.signedMs) late → checking"
+                Task { [weak self] in
+                    try? await Task.sleep(for: .milliseconds(150))
+                    self?.onRemoteQueryNow?()
+                }
             }
             log.add("remote", "\(summary) drift \(drift.signedMs) → \(decision)\(leadNote)")
             log.synced("App Remote", drift: drift)

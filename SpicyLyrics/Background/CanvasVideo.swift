@@ -7,10 +7,13 @@ import UIKit
 struct CanvasVideoView: UIViewRepresentable {
     let url: URL
     var playing = true
+    /// The first frame is on screen (true) or a new video is loading (false).
+    var onReady: (Bool) -> Void = { _ in }
 
     func makeUIView(context: Context) -> CanvasPlayerView { CanvasPlayerView() }
 
     func updateUIView(_ view: CanvasPlayerView, context: Context) {
+        view.onReady = onReady
         view.load(url)
         view.setPlaying(playing)
     }
@@ -28,6 +31,7 @@ final class CanvasPlayerView: UIView {
     private var url: URL?
     private var playing = true
     private var readyObservation: NSKeyValueObservation?
+    var onReady: (Bool) -> Void = { _ in }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -44,6 +48,8 @@ final class CanvasPlayerView: UIView {
         self.url = url
         stop()
         alpha = 0
+        // Called from SwiftUI's update: report it after, not during.
+        DispatchQueue.main.async { [weak self] in self?.onReady(false) }
         let item = AVPlayerItem(url: url)
         let player = AVQueuePlayer()
         player.isMuted = true
@@ -54,7 +60,9 @@ final class CanvasPlayerView: UIView {
         readyObservation = playerLayer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] layer, _ in
             guard layer.isReadyForDisplay else { return }
             DispatchQueue.main.async {
-                UIView.animate(withDuration: 0.8) { self?.alpha = 1 }
+                UIView.animate(withDuration: 0.8) { self?.alpha = 1 } completion: { finished in
+                    if finished { self?.onReady(true) }
+                }
             }
         }
         if playing { player.play() }

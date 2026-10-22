@@ -16,6 +16,7 @@ struct SpicyLyricsApp: App {
 
     init() {
         AudioRoute.prepare()
+        MainThreadPulse.start()
         CustomFonts.shared.registerAll()
         let settings = AppSettings()
         SyncLog.shared.enabled = settings.syncLogEnabled
