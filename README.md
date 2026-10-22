@@ -27,6 +27,11 @@ the popular Spicetify extension for Spotify on desktop. Made by
 <p align="center"><sub>Turn your phone sideways</sub></p>
 
 <p align="center">
+  <img src="docs/media/line-menu.webp" width="250" alt="Holding a line opens its menu, and What Does It Mean? explains the line">
+</p>
+<p align="center"><sub>Hold a line to play from it, copy or share it, or ask what it means</sub></p>
+
+<p align="center">
   <img src="docs/media/ipad.webp" height="302" alt="iPad: the player next to the lyrics">
   <img src="docs/media/tv.webp" height="302" alt="Full-screen lyrics on a TV over Screen Mirroring">
 </p>
@@ -54,6 +59,8 @@ the popular Spicetify extension for Spotify on desktop. Made by
   and instrumental breaks show three bouncing dots.
 - **Tap a line to jump to it.** Swipe sideways to change songs, pinch to make the text bigger,
   long-press a line to copy or share it (swipe and pinch need iOS 18).
+- **Ask what a line means.** Hold a line and tap What Does It Mean? to get a short explanation
+  of the line, or switch to Whole Song for the song as a whole.
 - **A background made from the album cover** that slowly flows like liquid.
 - **Big artwork mode**: the quote button at the bottom left swaps the lyrics for a large cover
   with the current line under it.
