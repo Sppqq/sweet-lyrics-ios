@@ -240,7 +240,7 @@ final class ReportService {
     /// Real failures only: not the App Remote refusals that are normal, not "not found".
     nonisolated static func isReportable(_ source: String, _ message: String) -> Bool {
         switch source {
-        case "remote", "web":
+        case "remote", "web", "control-expected":
             // App Remote refusals are normal; a failed poll is the network, retried in seconds.
             return false
         case "translate":
