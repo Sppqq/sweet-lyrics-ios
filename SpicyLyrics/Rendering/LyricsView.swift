@@ -363,6 +363,10 @@ extension LyricsView {
                     .scaleEffect(pressedLine == line.id ? 0.955 : 1, anchor: pressAnchor(line))
                     .brightness(pressedLine == line.id ? 0.08 : 0)
                     .animation(.spring(response: 0.3, dampingFraction: 0.62), value: pressedLine == line.id)
+                    // While held, the line is the card in its menu. It goes at once, not with the
+                    // press spring or the blur behind the menu, or the two copies overlap.
+                    .opacity(held?.line.id == line.id ? 0 : 1)
+                    .transaction(value: held?.line.id == line.id) { $0.animation = nil }
                     .onLongPressGesture(minimumDuration: 0.4) {
                         guard !line.isInterlude, let frame = culling.frame(of: line.id) else { return }
                         onInteraction()

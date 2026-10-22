@@ -27,11 +27,6 @@ the popular Spicetify extension for Spotify on desktop. Made by
 <p align="center"><sub>Turn your phone sideways</sub></p>
 
 <p align="center">
-  <img src="docs/media/line-menu.webp" width="250" alt="Holding a line opens its menu, and What Does It Mean? explains the line">
-</p>
-<p align="center"><sub>Hold a line to play from it, copy or share it, or ask what it means</sub></p>
-
-<p align="center">
   <img src="docs/media/ipad.webp" height="302" alt="iPad: the player next to the lyrics">
   <img src="docs/media/tv.webp" height="302" alt="Full-screen lyrics on a TV over Screen Mirroring">
 </p>
@@ -45,11 +40,12 @@ the popular Spicetify extension for Spotify on desktop. Made by
 <p align="center"><sub>Your own look · lyrics in Latin letters · big artwork mode</sub></p>
 
 <p align="center">
-  <img src="docs/media/simple.webp" width="250" alt="Simple Lyrics Mode">
-  <img src="docs/media/queue.webp" width="250" alt="The queue sheet: now playing and what's next">
-  <img src="docs/media/settings.png" width="250" alt="Settings with quick switches">
+  <img src="docs/media/line-menu.webp" width="187" alt="Holding a line opens its menu, and What Does It Mean? explains the line">
+  <img src="docs/media/simple.webp" width="187" alt="Simple Lyrics Mode">
+  <img src="docs/media/queue.webp" width="187" alt="The queue sheet: now playing and what's next">
+  <img src="docs/media/settings.png" width="187" alt="Settings with quick switches">
 </p>
-<p align="center"><sub>Simple Lyrics Mode · queue · settings</sub></p>
+<p align="center"><sub>Hold a line to ask what it means · Simple Lyrics Mode · queue · settings</sub></p>
 
 ## What it can do
 
