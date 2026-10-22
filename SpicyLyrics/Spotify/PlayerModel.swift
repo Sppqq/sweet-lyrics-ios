@@ -1226,15 +1226,32 @@ final class PlayerModel {
     private func control(_ name: String, _ action: @escaping () async throws -> Void, optimistic: (() -> Void)? = nil) {
         guard supportsSpotifyFeatures else { return }
         let generation = sourceGeneration
+        let trackIDBeforeControl = track?.id
         optimistic?()
         // Ignore stale polls for a moment so the optimistic state isn't undone.
         holdUntil = MediaClock.now() + 1.5
         Task {
+            var checkedAfterAmbiguousNext = false
             do {
                 try await action()
                 try? await Task.sleep(for: .milliseconds(400))
             } catch {
                 guard generation == sourceGeneration else { return }
+                // A timed-out next request may still have reached Spotify. Check the player
+                // before showing a failure: a changed track confirms that the command worked.
+                if name == "next", let trackIDBeforeControl,
+                   let apiError = error as? SpotifyAPIError,
+                   case .network(let networkError) = apiError,
+                   networkError.code == .timedOut {
+                    _ = await pollOnce()
+                    checkedAfterAmbiguousNext = true
+                    guard generation == sourceGeneration else { return }
+                    if track?.id != trackIDBeforeControl {
+                        transientError = nil
+                        holdUntil = 0
+                        return
+                    }
+                }
                 // Spotify not running anywhere: shown to the user, but not a bug to report.
                 var expectedMissingDevice = false
                 if case .noActiveDevice = error as? SpotifyAPIError { expectedMissingDevice = true }
@@ -1244,7 +1261,7 @@ final class PlayerModel {
             }
             guard generation == sourceGeneration else { return }
             holdUntil = 0
-            _ = await pollOnce()
+            if !checkedAfterAmbiguousNext { _ = await pollOnce() }
         }
     }
 
