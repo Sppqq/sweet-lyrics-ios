@@ -1235,7 +1235,9 @@ final class PlayerModel {
                 try? await Task.sleep(for: .milliseconds(400))
             } catch {
                 guard generation == sourceGeneration else { return }
-                let expectedMissingDevice = (error as? SpotifyAPIError) == .noActiveDevice
+                // Spotify not running anywhere: shown to the user, but not a bug to report.
+                var expectedMissingDevice = false
+                if case .noActiveDevice = error as? SpotifyAPIError { expectedMissingDevice = true }
                 SyncLog.shared.add(expectedMissingDevice ? "control-expected" : "control",
                                    "\(name) failed: \(error.localizedDescription)")
                 transientError = error.localizedDescription
