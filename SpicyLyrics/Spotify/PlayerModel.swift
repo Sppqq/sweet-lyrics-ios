@@ -595,7 +595,16 @@ final class PlayerModel {
         }
         lastSample = (snapshot.progress, snapshot.measuredAt, snapshot.stateChangedAt)
 
-        let measured = snapshot.progress + (snapshot.isPlaying ? now - snapshot.measuredAt : 0)
+        // When App Remote cannot connect, the Web API may be our first observation of a
+        // naturally started song. Apply the same learned start lead as App Remote does.
+        // A track change shortly after an in-app control is intentional and must stay exact.
+        if trackChanged, case .track = snapshot.content {
+            leadActive = snapshot.isPlaying && snapshot.progress < Self.leadMaxStart
+                && now >= holdUntil && transitionWindow == 0
+            trackStartedAt = now
+        }
+        let rawMeasured = snapshot.progress + (snapshot.isPlaying ? now - snapshot.measuredAt : 0)
+        let measured = rawMeasured - (trackChanged && leadActive ? startLead : 0)
         // On a frozen device `progress_ms` is the position at `timestamp` (the last state change).
         var stampEstimate: Double?
         if frozenReports, snapshot.isPlaying, let stamp = snapshot.stateChangedAt {
@@ -623,6 +632,7 @@ final class PlayerModel {
             setClock(measured, at: now, detectSeek: !trackChanged)
             refineSamples = snapshot.isPlaying && !frozenReports ? Self.refineCount : 0
             decision = "set \(measured.s3) (\(trackChanged ? "new track" : stateChanged ? "play/pause" : isResyncing ? "resync" : "paused"))"
+            if trackChanged && leadActive { decision += " (start lead \(startLead.signedMs))" }
         } else if frozenReports {
             // Keep our own clock; the frozen value only says where the last change happened.
             decision = "frozen device, kept clock"
