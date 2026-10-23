@@ -17,7 +17,11 @@ struct MarqueeText: View {
 
     @State private var textWidth: CGFloat = 0
     @State private var boxWidth: CGFloat = 0
-    @State private var scrolled = false
+    /// The text whose lap is under way. Tied to the text, so a new title starts at rest even
+    /// while the old lap's animation is still in flight.
+    @State private var scrolledText: String?
+
+    private var scrolled: Bool { scrolledText == text }
 
     private var overflows: Bool { boxWidth > 0 && textWidth > boxWidth + 1 }
 
@@ -39,6 +43,9 @@ struct MarqueeText: View {
                     if overflows { label }
                 }
                 .offset(x: scrolled ? -(textWidth + Self.gap) : 0)
+                // A fresh view per title: SwiftUI adds an un-animated change on top of a running
+                // animation, so the old lap kept sliding a short title that should stand still.
+                .id(text)
             }
             .clipped()
             .mask(edgeMask)
@@ -72,7 +79,7 @@ struct MarqueeText: View {
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(Self.pause))
             guard !Task.isCancelled else { break }
-            withAnimation(.linear(duration: lap)) { scrolled = true }
+            withAnimation(.linear(duration: lap)) { scrolledText = text }
             try? await Task.sleep(for: .seconds(lap))
             guard !Task.isCancelled else { break }
             // The second copy now sits exactly where the first began: jump back unseen.
@@ -84,6 +91,6 @@ struct MarqueeText: View {
     private func reset() {
         var transaction = Transaction()
         transaction.disablesAnimations = true
-        withTransaction(transaction) { scrolled = false }
+        withTransaction(transaction) { scrolledText = nil }
     }
 }
