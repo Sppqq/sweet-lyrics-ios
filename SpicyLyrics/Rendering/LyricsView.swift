@@ -126,9 +126,9 @@ struct LyricsView: View {
         if shown.kind == .static { return 1.0 / 4 }
         if !player.isPlaying { return 1.0 / 15 }
         var target = max(15, settings.lyricsFrameRate)
-        // Line by line, only a slow sweep moves between lines (the scroll is Core Animation's
-        // own, at the screen's rate): 30 fps looks the same and costs half.
-        if reduced || lowFrameRate || throttled || shown.kind == .line { target = min(30, target) }
+        // The selected rate applies to both syllable-synced and line-synced lyrics. Only an
+        // explicit power/thermal limit or a measured rendering stall should lower it.
+        if reduced || lowFrameRate || throttled { target = min(30, target) }
         return 1 / target
     }
 
