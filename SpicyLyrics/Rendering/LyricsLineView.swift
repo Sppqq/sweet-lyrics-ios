@@ -191,7 +191,7 @@ struct LyricLineView: View, Equatable {
                     WordFlowView(words: lead, visuals: visual.lead,
                                  fontSize: line.isBackground ? typography.backgroundFontSize : typography.fontSize,
                                  font: line.isBackground ? typography.backgroundFont : typography.leadFont,
-                                 alpha: line.isBackground ? .background : typography.leadAlpha, typography: typography,
+                                 alpha: line.isBackground && !visual.soloBackground ? .background : typography.leadAlpha, typography: typography,
                                  alignment: horizontalAlignment)
                 }
                 if !background.isEmpty {

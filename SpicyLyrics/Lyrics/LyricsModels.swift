@@ -115,7 +115,10 @@ struct PreparedLine: Identifiable, Hashable {
     var kind: PreparedLineKind
     /// A background vocal (`.line.bg-line`): its own row under its lead line, smaller and dimmer.
     var isBackground = false
-    /// For background rows: the lead line they belong to (focus never stops on a background row).
+    /// The actual singing end, retained when Minimal Lyrics Mode extends visual timing.
+    var vocalEnd: Double? = nil
+    var singingEnd: Double { vocalEnd ?? end }
+    /// For background rows: the lead line they belong to.
     var leadID: Int?
     /// The line in its original language and script, what gets translated.
     var sourceText = ""
@@ -249,7 +252,10 @@ struct PreparedLyrics: Hashable {
         let leads = lines.indices.filter { !lines[$0].isBackground && !lines[$0].isInterlude }
         for (index, next) in zip(leads, leads.dropFirst()) {
             let gap = lines[next].start - lines[index].end
-            if gap > 0, gap < threshold { lines[index].end = lines[next].start }
+            if gap > 0, gap < threshold {
+                lines[index].vocalEnd = lines[index].singingEnd
+                lines[index].end = lines[next].start
+            }
         }
     }
 

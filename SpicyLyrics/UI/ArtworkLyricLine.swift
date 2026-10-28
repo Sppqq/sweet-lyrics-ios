@@ -20,6 +20,7 @@ struct ArtworkLyricLine: View {
     @State private var animator: LyricsAnimator
     @State private var switcher = LineSwitcher()
     @State private var glide = FrameGlide()
+    @State private var vocalFocus = VocalFocusState()
 
     init(lyrics: PreparedLyrics, player: PlayerModel, settings: AppSettings, fontSize: CGFloat = 24, frame: CGRect) {
         self.player = player
@@ -74,8 +75,13 @@ struct ArtworkLyricLine: View {
     private func block(_ index: Int, _ typography: LyricsTypography) -> some View {
         let lines = animator.lyrics.lines
         let visuals = animator.visuals
-        let rows = lines.indices.contains(index) ? Self.rows(of: index, in: lines) : []
-        return VStack(alignment: .leading, spacing: 0) {
+        let lead = lines.indices.contains(index) && lines[index].isBackground
+            ? (lines[index].leadID ?? index)
+            : index
+        let rows = lines.indices.contains(lead) ? Self.rows(of: lead, in: lines) : []
+        let focus = vocalFocus.resolve(group: lead, row: rows.firstIndex(of: animator.focusIndex),
+                                       current: switcher.current, previous: switcher.previous)
+        return VocalFocusLayout(focusedRow: focus.row, glide: focus.glide) {
             ForEach(rows, id: \.self) { row in
                 LyricLineView(line: lines[row], visual: visuals[row], typography: typography,
                               translation: translation(lines[row]))
@@ -88,10 +94,12 @@ struct ArtworkLyricLine: View {
     /// vocals) has been sung.
     private static func shownLine(_ lines: [PreparedLine], focus: Int, at position: Double) -> Int? {
         guard lines.indices.contains(focus) else { return nil }
-        let isLast = !lines[(focus + 1)...].contains { !$0.isBackground }
-        guard isLast else { return focus }
-        let end = backing(of: focus, in: lines).map { lines[$0].end }.reduce(lines[focus].end, max)
-        return position > end + 1 ? nil : focus
+        let lead = lines[focus].isBackground ? (lines[focus].leadID ?? focus) : focus
+        guard lines.indices.contains(lead) else { return nil }
+        let isLast = !lines[(lead + 1)...].contains { !$0.isBackground }
+        guard isLast else { return lead }
+        let end = backing(of: lead, in: lines).map { lines[$0].end }.reduce(lines[lead].end, max)
+        return position > end + 1 ? nil : lead
     }
 
     /// Backing-vocal rows that belong to a lead line.
@@ -140,6 +148,44 @@ struct ArtworkLyricLine: View {
     private func translation(_ line: PreparedLine) -> String? {
         guard settings.translateLyrics, !settings.translationReplaces else { return nil }
         return player.translations[line.sourceText]
+    }
+}
+
+/// Each group keeps its own offset, including while the outgoing group fades away.
+private final class VocalFocusState {
+    private var groups: [Int: (row: Int, glide: FrameGlide)] = [:]
+
+    func resolve(group: Int, row: Int?, current: Int?, previous: Int?) -> (row: Int, glide: FrameGlide) {
+        groups = groups.filter { $0.key == current || $0.key == previous }
+        var focus = groups[group] ?? (row: 0, glide: FrameGlide())
+        if let row { focus.row = row }
+        groups[group] = focus
+        return focus
+    }
+}
+
+/// Keeps the whole vocal group mounted while bringing the focused row to its anchor.
+private struct VocalFocusLayout: Layout {
+    var focusedRow: Int
+    let glide: FrameGlide
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let sizes = subviews.map { $0.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil)) }
+        return CGSize(width: proposal.width ?? sizes.map(\.width).max() ?? 0,
+                      height: sizes.reduce(0) { $0 + $1.height })
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rowProposal = ProposedViewSize(width: bounds.width, height: nil)
+        let sizes = subviews.map { $0.sizeThatFits(rowProposal) }
+        let target = sizes.prefix(focusedRow).reduce(CGFloat.zero) { $0 + $1.height }
+        let shift = glide.value(toward: CGRect(x: 0, y: target, width: bounds.width, height: 1),
+                                now: CACurrentMediaTime()).minY
+        var y = bounds.minY - shift
+        for (index, subview) in subviews.enumerated() {
+            subview.place(at: CGPoint(x: bounds.minX, y: y), anchor: .topLeading, proposal: rowProposal)
+            y += sizes[index].height
+        }
     }
 }
 
