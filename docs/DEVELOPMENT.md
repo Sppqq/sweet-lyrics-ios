@@ -211,3 +211,46 @@ cloudflare/     Report server (Worker, D1, R2): see cloudflare/README.md
 scripts/        AltStore source generator and tests, build-time key script
 .github/        Build and release workflow, report bot (workflow and prompt)
 ```
+
+## Spotify Canvas
+
+Settings → Appearance → Canvas enables a muted, full-screen looping video behind the
+player and lyrics, with extra darkening for readability. It defaults to off. The cover
+remains visible until the first video frame is ready and when no Canvas can be loaded.
+Playback pauses with the track, in the background, and in power saving mode.
+
+Canvas uses the same service as spicylyrics/mobile: an unauthenticated GET to
+`https://regional.canvasstore.slnode.spicylyrics.org/provider/canvaslist/<trackID>`.
+Only the Spotify track ID is sent; no OAuth or client token. The response contains
+`data[trackID].url`, or null for no Canvas. HTTPS MP4s are accepted, still images ignored.
+Malformed replies and service errors are not cached as missing videos. A transient error
+is retried once; repeated errors and Retry-After pause lookups to avoid hammering the
+service. Found URLs and misses have bounded in-memory lifetimes. Failed lookups can be
+retried when the app becomes active again. Errors are logged under `canvas`.
+Protocol reference: https://github.com/spicylyrics/mobile/blob/main/core/src/main/kotlin/com/tx24/spicyplayer/network/canvas/SpotifyCanvasFinder.kt
+
+Run the service regression checks on Linux:
+
+```sh
+swiftc -swift-version 5 -parse-as-library SpicyLyrics/Spotify/SpotifyCanvasService.swift scripts/test_canvas.swift -o /tmp/test-canvas
+/tmp/test-canvas
+```
+
+## Building with xtool on Linux
+
+With Swift 6.4+, the Darwin SDK, xtool and `zip` installed:
+
+```sh
+bash scripts/generate-bundled-keys.sh
+xtool dev build --ipa
+```
+
+The unsigned device IPA is written to `xtool/SpicyLyrics.ipa`. Sign it with your
+sideloading tool before installing. `Package.swift` and `xtool.yml` configure this
+build independently of XcodeGen; `Config/Xtool-Info.plist` mirrors the app properties
+in `project.yml` and needs to stay in sync with them. The SwiftUI layout is split
+into smaller expressions to keep type checking manageable with the Linux toolchain.
+Metal source is bundled and compiled on the device because the Linux SDK does not
+include the Metal compiler. Xcode builds continue using their precompiled library.
+
+For an AppImage installation without FUSE, set `APPIMAGE_EXTRACT_AND_RUN=1`.

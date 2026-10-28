@@ -4,6 +4,7 @@ import UIKit
 
 /// The nebula full screen: behind the big cover, or alone where lyrics were hidden.
 struct CoverVisualizerView: View {
+    @Environment(AppSettings.self) private var settings
     let player: PlayerModel
     var reduced = false
     /// The background's darkening, so white lines stay readable on bright covers.
@@ -19,7 +20,7 @@ struct CoverVisualizerView: View {
     var body: some View {
         CoverVisualizer(image: player.backgroundArtwork, imageID: player.artworkID, player: player, reduced: reduced,
                         randomColors: randomColors, stars: stars, frameCounter: frameCounter, maxFrameRate: maxFrameRate)
-            .overlay(Color.black.opacity(dim))
+            .overlay(Color.black.opacity(1 - (1 - min(1, max(0, dim))) * min(1, max(0, settings.nebulaBrightness))))
             .ignoresSafeArea()
     }
 }
@@ -64,7 +65,7 @@ struct CoverVisualizer: UIViewRepresentable {
 
 final class VisualizerSurface: ShaderSurface {
     static let isSupported: Bool = {
-        guard let library = sharedDevice?.makeDefaultLibrary() else { return false }
+        guard let library = ShaderSurface.library else { return false }
         return library.makeFunction(name: "visualizerFragment") != nil
     }()
 

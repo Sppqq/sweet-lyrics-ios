@@ -1,0 +1,8 @@
+version: 1
+bundleID: com.spicylyrics.unofficial.ios
+infoPath: Config/Xtool-Info.plist
+iconPath: SpicyLyrics/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+resources:
+  - SpicyLyrics/Resources/en.lproj
+  - SpicyLyrics/Resources/ru.lproj
+  - SpicyLyrics/Background/Shaders.metal

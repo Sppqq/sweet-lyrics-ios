@@ -31,7 +31,7 @@ struct KawarpBackground: UIViewRepresentable {
 
 final class KawarpSurface: ShaderSurface {
     static let isSupported: Bool = {
-        guard let library = sharedDevice?.makeDefaultLibrary() else { return false }
+        guard let library = ShaderSurface.library else { return false }
         return library.makeFunction(name: "kawarpFragment") != nil
     }()
 

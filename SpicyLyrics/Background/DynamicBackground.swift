@@ -16,6 +16,8 @@ struct DynamicBackground: View {
     var artistImage: UIImage? = nil
     /// The song's Canvas for the "Canvas" style, when it has one.
     var canvasURL: URL? = nil
+    /// Big artwork mode can request Canvas independently of the lyrics background.
+    var canvasOverride = false
     let animated: Bool
     /// The flow slows to a tenth while the song is paused.
     var playing = true
@@ -34,7 +36,7 @@ struct DynamicBackground: View {
     @State private var canvasReady = false
 
     var body: some View {
-        if let gradient = settings.appTheme.gradient {
+        if let gradient = settings.appTheme.gradient, !canvasOverride {
             // A fixed theme: no cover, nothing moving.
             Rectangle().fill(gradient)
                 .ignoresSafeArea()
@@ -44,7 +46,10 @@ struct DynamicBackground: View {
         }
     }
 
-    private var style: BackgroundStyle { settings.background }
+    private var style: BackgroundStyle {
+        let selected = BackgroundStyle(rawValue: settings.backgroundStyle) ?? .dynamic
+        return selected == .canvas ? .dynamic : selected
+    }
 
     /// The cover keeps flowing under the other styles until their picture is there; under an
     /// opaque picture (a playing Canvas, the artist's photo, the visualizer) it stops: nobody
@@ -56,7 +61,7 @@ struct DynamicBackground: View {
     }
 
     /// A video needs more darkening than a blurred cover for white text to read on it.
-    private var canvasShown: Bool { style == .canvas && canvasURL != nil && image != nil }
+    private var canvasShown: Bool { (canvasOverride || (settings.showCanvas && settings.dynamicBackground)) && RemoteConfig.shared.values.canvas && canvasURL != nil }
 
     private var coverBackground: some View {
         ZStack {
@@ -74,12 +79,19 @@ struct DynamicBackground: View {
                     .transition(.opacity)
             }
             if canvasShown, let canvasURL {
-                CanvasVideoView(url: canvasURL, playing: playing) { ready in canvasReady = ready }
+                // Propose the entire background size to UIKit, including the safe areas.
+                // AVPlayerLayer then crops the portrait video to fill that rectangle.
+                GeometryReader { geometry in
+                    CanvasVideoView(url: canvasURL, playing: playing && !covered) { ready in canvasReady = ready }
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                }
+                    .id(canvasURL)
                     .saturation(saturation)
                     .transition(.opacity)
                     .onDisappear { canvasReady = false }
             }
-            Color.black.opacity(canvasShown ? min(0.85, dim + 0.15) : dim)
+            Color.black.opacity(canvasShown ? 1 - min(1, max(0, settings.canvasBrightness)) : dim)
         }
         .animation(.easeInOut(duration: 0.8), value: artistImage)
         .animation(.easeInOut(duration: 0.8), value: canvasURL)

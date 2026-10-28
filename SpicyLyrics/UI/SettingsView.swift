@@ -445,6 +445,15 @@ private struct BackgroundSettings: View {
 
             if settings.dynamicBackground {
                 Section {
+                    Toggle("Canvas", isOn: $settings.showCanvas)
+                    if settings.showCanvas {
+                        SliderRow(title: String(localized: "Яркость Canvas"), value: $settings.canvasBrightness, range: 0...1, step: 0.01)
+                    }
+                } footer: {
+                    Text(String(localized: "Видео Spotify на фоне, когда оно доступно. Без видео используется обложка. Доступность зависит от Spotify."))
+                }
+
+                Section {
                     Picker(String(localized: "Что на фоне"), selection: $settings.backgroundStyle) {
                         ForEach(BackgroundStyle.offered) { style in
                             Text(style.title).tag(style.rawValue)
@@ -467,6 +476,10 @@ private struct BackgroundSettings: View {
                 SliderRow(title: String(localized: "Затемнение"), value: $settings.backgroundDim, range: 0...0.7, step: 0.02)
             } footer: {
                 Text(String(localized: "Чем темнее фон, тем лучше читается белый текст на светлых обложках."))
+            }
+
+            Section(String(localized: "Туманность")) {
+                SliderRow(title: String(localized: "Яркость туманности"), value: $settings.nebulaBrightness, range: 0...1, step: 0.01)
             }
 
             ResetSection(title: String(localized: "Вернуть фон по умолчанию")) { settings.resetBackground() }
@@ -629,6 +642,7 @@ private struct InterfaceSettings: View {
             }
 
             Section {
+                Toggle(String(localized: "Canvas на весь экран без обложки"), isOn: $settings.artworkCanvas)
                 Toggle(String(localized: "Строка текста под обложкой"), isOn: $settings.artworkLyricLine)
                 Picker(String(localized: "Фон за обложкой"), selection: $settings.artworkBackground) {
                     ForEach(ArtworkBackground.allCases) { background in
@@ -642,6 +656,7 @@ private struct InterfaceSettings: View {
                         }
                     }
                     Toggle(String(localized: "Звёзды в туманности"), isOn: $settings.nebulaStars)
+                    SliderRow(title: String(localized: "Яркость туманности"), value: $settings.nebulaBrightness, range: 0...1, step: 0.01)
                 }
             } header: {
                 Text(String(localized: "Большая обложка"))

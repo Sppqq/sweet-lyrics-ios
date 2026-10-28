@@ -12,6 +12,11 @@ struct CanvasVideoView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> CanvasPlayerView { CanvasPlayerView() }
 
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: CanvasPlayerView, context: Context) -> CGSize? {
+        guard let width = proposal.width, let height = proposal.height else { return nil }
+        return CGSize(width: width, height: height)
+    }
+
     func updateUIView(_ view: CanvasPlayerView, context: Context) {
         view.onReady = onReady
         view.load(url)
@@ -36,6 +41,7 @@ final class CanvasPlayerView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false
+        clipsToBounds = true
         playerLayer.videoGravity = .resizeAspectFill
         // Fades in once the first frame is ready, over the cover underneath.
         alpha = 0
@@ -45,11 +51,14 @@ final class CanvasPlayerView: UIView {
 
     func load(_ url: URL) {
         guard url != self.url else { return }
-        self.url = url
         stop()
+        self.url = url
         alpha = 0
         // Called from SwiftUI's update: report it after, not during.
-        DispatchQueue.main.async { [weak self] in self?.onReady(false) }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.url == url else { return }
+            self.onReady(false)
+        }
         let item = AVPlayerItem(url: url)
         let player = AVQueuePlayer()
         player.isMuted = true
@@ -60,8 +69,9 @@ final class CanvasPlayerView: UIView {
         readyObservation = playerLayer.observe(\.isReadyForDisplay, options: [.new]) { [weak self] layer, _ in
             guard layer.isReadyForDisplay else { return }
             DispatchQueue.main.async {
-                UIView.animate(withDuration: 0.8) { self?.alpha = 1 } completion: { finished in
-                    if finished { self?.onReady(true) }
+                guard let self, self.url == url, self.playerLayer.isReadyForDisplay else { return }
+                UIView.animate(withDuration: 0.8) { self.alpha = 1 } completion: { finished in
+                    if finished, self.url == url { self.onReady(true) }
                 }
             }
         }
@@ -75,6 +85,9 @@ final class CanvasPlayerView: UIView {
 
     func stop() {
         readyObservation = nil
+        url = nil
+        layer.removeAllAnimations()
+        alpha = 0
         player?.pause()
         looper?.disableLooping()
         looper = nil

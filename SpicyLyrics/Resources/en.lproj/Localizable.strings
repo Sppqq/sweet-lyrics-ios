@@ -641,3 +641,11 @@
 "Что не так с ответом?" = "What's wrong with the answer?";
 "Коротко опишите" = "Describe it briefly";
 "Не получилось отправить. Попробуйте ещё раз." = "Couldn't send it. Please try again.";
+
+"Видео Spotify на фоне, когда оно доступно. Без видео используется обложка. Доступность зависит от Spotify." = "Spotify video in the background when available. Falls back to the cover. Availability depends on Spotify.";
+
+"Яркость Canvas" = "Canvas brightness";
+
+"Яркость туманности" = "Nebula brightness";
+
+"Canvas на весь экран без обложки" = "Full-screen Canvas without artwork";

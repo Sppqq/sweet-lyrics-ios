@@ -56,7 +56,7 @@ struct NowPlayingView: View {
     /// The small cover in the header.
     private static let miniArtworkSide: CGFloat = 54
 
-    var body: some View {
+    private var playerLayout: some View {
         GeometryReader { geometry in
             let size = Self.clampedToWindow(geometry.size)
             // Side by side in landscape. iPad upright gets the portrait layout: side by side, the
@@ -78,8 +78,9 @@ struct NowPlayingView: View {
                     imageID: player.artworkID,
                     artistImage: player.artistImage,
                     canvasURL: player.canvasURL,
+                    canvasOverride: artworkCanvasActive,
                     animated: settings.dynamicBackground && !reduced && !tvMode,
-                    playing: player.isPlaying,
+                    playing: player.isPlaying && scenePhase == .active && !reduced && !tvMode,
                     dim: settings.backgroundDim,
                     speed: settings.backgroundSpeed,
                     blur: settings.backgroundBlur,
@@ -142,6 +143,10 @@ struct NowPlayingView: View {
                 #endif
             }
         }
+    }
+
+    private var playerPresentation: some View {
+        playerLayout
         .sensoryFeedback(.impact(weight: .light), trigger: skipCount)
         .background { keyboardShortcuts }
         .statusBarHidden(!chromeVisible)
@@ -159,6 +164,7 @@ struct NowPlayingView: View {
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Self.relayoutWindows()
+            player.loadBackgroundVisuals()
             // The lyrics are on screen again: the floating window has nothing left to do.
             if settings.closePiPOnReturn { pip.stopIfIdle() }
         }
@@ -206,9 +212,15 @@ struct NowPlayingView: View {
                 .presentationDetents([.medium, .large], selection: $pickerDetent)
                 .presentationDragIndicator(.visible)
         }
+    }
+
+    var body: some View {
+        playerPresentation
         .onChange(of: settings.showRomanization) { _, _ in player.settingsChanged() }
         .onChange(of: settings.simpleLyricsMode) { _, _ in player.settingsChanged() }
         .onChange(of: settings.joinSplitWords) { _, _ in player.settingsChanged() }
+        .onChange(of: settings.artworkCanvas) { _, _ in player.loadBackgroundVisuals() }
+        .onChange(of: settings.showCanvas) { _, _ in player.loadBackgroundVisuals() }
         .onChange(of: settings.backgroundStyle) { _, _ in player.loadBackgroundVisuals() }
         .onChange(of: settings.dynamicBackground) { _, _ in player.loadBackgroundVisuals() }
         .onChange(of: settings.minimalLyricsMode) { _, _ in player.settingsChanged() }
@@ -364,7 +376,7 @@ struct NowPlayingView: View {
 
     /// The experimental visualizer fills in for lyrics hidden by the user's choice.
     private var showVisualizer: Bool {
-        CoverVisualizer.isSupported && !tvMode
+        CoverVisualizer.isSupported && !tvMode && !artworkCanvasActive
             && ((bigArtworkShown && settings.artworkBackground == ArtworkBackground.nebula.rawValue)
                 || (lyricsHidden && settings.hiddenLyricsView == HiddenLyricsView.visualizer.rawValue))
     }
@@ -373,6 +385,10 @@ struct NowPlayingView: View {
     /// for songs whose lyrics are hidden.
     private var bigArtworkShown: Bool {
         !tvMode && (artworkMode || (lyricsHidden && settings.hiddenLyricsView == HiddenLyricsView.artwork.rawValue))
+    }
+
+    private var artworkCanvasActive: Bool {
+        bigArtworkShown && settings.artworkCanvas && RemoteConfig.shared.values.canvas && player.canvasURL != nil
     }
 
     /// Synced lyrics for the line under the big cover.
@@ -885,24 +901,26 @@ struct NowPlayingView: View {
             let side = max(0, min(geometry.size.width - margin * 2, freeHeight - margin * 2 - lineHeight - gap, 720))
             let blockTop = topInset + freeHeight / 2 - (side + gap + lineHeight) / 2
             ZStack(alignment: .topLeading) {
-                ZStack {
-                    artworkFill(cornerRadius: max(10, side * 0.035))
-                        .id(player.artworkID)
-                        .transition(.opacity)
+                if !artworkCanvasActive {
+                    ZStack {
+                        artworkFill(cornerRadius: max(10, side * 0.035))
+                            .id(player.artworkID)
+                            .transition(.opacity)
+                    }
+                    .matchedGeometryEffect(id: "cover", in: coverSpace)
+                    .frame(width: side, height: side)
+                    .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
+                    .scaleEffect(player.isPlaying ? 1 : 0.88)
+                    .position(x: geometry.size.width / 2, y: blockTop + side / 2)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.75), value: player.isPlaying)
+                    .animation(.easeInOut(duration: 0.6), value: player.artworkID)
+                    .animation(Self.chromeAnimation, value: topInset)
+                    .animation(Self.chromeAnimation, value: bottomInset)
                 }
-                .matchedGeometryEffect(id: "cover", in: coverSpace)
-                .frame(width: side, height: side)
-                .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
-                .scaleEffect(player.isPlaying ? 1 : 0.88)
-                .position(x: geometry.size.width / 2, y: blockTop + side / 2)
-                .animation(.spring(response: 0.5, dampingFraction: 0.75), value: player.isPlaying)
-                .animation(.easeInOut(duration: 0.6), value: player.artworkID)
-                .animation(Self.chromeAnimation, value: topInset)
-                .animation(Self.chromeAnimation, value: bottomInset)
                 // Moves itself along with the cover (see `ArtworkLyricLine`).
                 if let lyrics {
                     ArtworkLyricLine(lyrics: lyrics, player: player, settings: settings, fontSize: lineFont,
-                                     frame: CGRect(x: (geometry.size.width - side) / 2, y: blockTop + side + gap,
+                                     frame: CGRect(x: (geometry.size.width - side) / 2, y: artworkCanvasActive ? topInset + freeHeight - lineHeight - margin : blockTop + side + gap,
                                                    width: side, height: lineHeight))
                         .id(player.lyricsRevision)
                         .transition(.opacity)

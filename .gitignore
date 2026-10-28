@@ -35,3 +35,8 @@ server/report-bot/codex-code-mode-host
 server/report-bot/codex-bwrap-real
 server/report-bot/secrets.json
 .report-bot-state/
+
+# SwiftPM / xtool build output
+.build/
+.bsp/
+xtool/

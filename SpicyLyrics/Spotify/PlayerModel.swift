@@ -30,10 +30,11 @@ final class PlayerModel {
     /// The song's Canvas loop, for the "Canvas" background (Spotify only).
     private(set) var canvasURL: URL?
     @ObservationIgnored private var visualsTask: Task<Void, Never>?
+    @ObservationIgnored private var canvasTask: Task<Void, Never>?
+    @ObservationIgnored private var canvasKey = ""
     /// Style and track the background visuals were loaded for.
     @ObservationIgnored private var visualsKey = ""
     @ObservationIgnored private var artistImages: [String: UIImage] = [:]
-    @ObservationIgnored private var canvasURLs: [String: URL?] = [:]
     /// Bumped whenever new lyrics are shown, so the lyrics view starts fresh.
     private(set) var lyricsRevision = 0
     private var currentLyricsState: LyricsState = .idle
@@ -1457,68 +1458,64 @@ final class PlayerModel {
         loadBackgroundVisuals()
     }
 
-    /// The artist's photo or the Canvas when the background style asks for one. Each is looked up
-    /// once per track (and remembered), in the background; until then the cover shows.
+    /// Artist and Canvas have separate tasks: a Canvas on the big cover can coexist with an
+    /// artist-photo background, even when the background's own Canvas switch is off.
     func loadBackgroundVisuals() {
-        let style = settings.background
-        guard settings.dynamicBackground, supportsSpotifyFeatures,
-              style == .artist || (style == .canvas && RemoteConfig.shared.values.canvas),
-              case .track(let info) = content, !info.isLocal, !info.id.hasPrefix("am:")
-        else {
+        loadCanvasVisual()
+        guard settings.dynamicBackground, settings.background == .artist, supportsSpotifyFeatures,
+              case .track(let info) = content, !info.isLocal, !info.id.hasPrefix("am:") else {
             visualsTask?.cancel()
             visualsKey = ""
-            if artistImage != nil { artistImage = nil }
-            if canvasURL != nil { canvasURL = nil }
+            artistImage = nil
             return
         }
-        let key = style.rawValue + "|" + info.id
+        let key = info.id
         guard key != visualsKey else { return }
         visualsKey = key
         visualsTask?.cancel()
-        let trackID = info.id, uri = info.uri
-        switch style {
-        case .artist:
-            if canvasURL != nil { canvasURL = nil }
-            if let cached = artistImages[trackID] {
-                artistImage = cached
-                return
-            }
-            artistImage = nil
-            visualsTask = Task { [weak self] in
-                guard let self else { return }
-                guard let url = try? await self.api.artistImageURL(trackID: trackID),
-                      let data = try? await URLSession.shared.data(from: url).0,
-                      let image = UIImage(data: data)?.downscaled(to: 720),
-                      !Task.isCancelled, self.visualsKey == key
-                else { return }
-                if self.artistImages.count > 40 { self.artistImages.removeAll() }
-                self.artistImages[trackID] = image
-                self.artistImage = image
-            }
-        case .canvas:
-            if artistImage != nil { artistImage = nil }
-            if let cached = canvasURLs[trackID] {
-                canvasURL = cached
-                return
-            }
+        if let cached = artistImages[key] {
+            artistImage = cached
+            return
+        }
+        artistImage = nil
+        visualsTask = Task { [weak self] in
+            guard let self else { return }
+            guard let url = try? await self.api.artistImageURL(trackID: key),
+                  let data = try? await URLSession.shared.data(from: url).0,
+                  let image = UIImage(data: data)?.downscaled(to: 720),
+                  !Task.isCancelled, self.visualsKey == key else { return }
+            if self.artistImages.count > 40 { self.artistImages.removeAll() }
+            self.artistImages[key] = image
+            self.artistImage = image
+        }
+    }
+
+    private func loadCanvasVisual() {
+        let wanted = (settings.dynamicBackground && settings.showCanvas) || settings.artworkCanvas
+        guard wanted, RemoteConfig.shared.values.canvas, supportsSpotifyFeatures,
+              case .track(let info) = content, !info.isLocal, !info.id.hasPrefix("am:") else {
+            canvasTask?.cancel()
+            canvasKey = ""
             canvasURL = nil
-            visualsTask = Task { [weak self] in
-                guard let self else { return }
-                let url: URL?
-                do {
-                    url = try await self.api.canvasURL(trackURI: uri)
-                } catch {
-                    SyncLog.log("canvas", "failed: \(error.localizedDescription)")
-                    return
-                }
-                guard !Task.isCancelled, self.visualsKey == key else { return }
-                if self.canvasURLs.count > 100 { self.canvasURLs.removeAll() }
-                self.canvasURLs[trackID] = url
+            return
+        }
+        let key = info.id
+        guard key != canvasKey else { return }
+        canvasKey = key
+        canvasTask?.cancel()
+        canvasURL = nil
+        canvasTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let url = try await self.api.canvasURL(trackURI: info.uri)
+                guard !Task.isCancelled, self.canvasKey == key else { return }
                 self.canvasURL = url
                 SyncLog.log("canvas", url == nil ? "none for this song" : "found")
+            } catch {
+                guard !Task.isCancelled, self.canvasKey == key else { return }
+                self.canvasKey = ""
+                SyncLog.log("canvas", "lookup failed: \(error)")
             }
-        case .dynamic, .cover:
-            break
         }
     }
 

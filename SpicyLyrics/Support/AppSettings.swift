@@ -161,6 +161,8 @@ final class AppSettings {
     var hiddenLyricsView: String { didSet { defaults.set(hiddenLyricsView, forKey: Keys.hiddenLyricsView) } }
     /// `NebulaColors.rawValue`: where the nebula takes its colours from.
     var nebulaColors: String { didSet { defaults.set(nebulaColors, forKey: Keys.nebulaColors) } }
+    /// Visible nebula brightness, from black to its original brightness.
+    var nebulaBrightness: Double { didSet { defaults.set(nebulaBrightness, forKey: Keys.nebulaBrightness) } }
     /// Twinkling stars in the dark parts of the nebula.
     var nebulaStars: Bool { didSet { defaults.set(nebulaStars, forKey: Keys.nebulaStars) } }
     // The TV (AirPlay screen mirroring or a cable): set up from the phone while it is connected.
@@ -180,6 +182,8 @@ final class AppSettings {
     var tvPhoneLyrics: Bool { didSet { defaults.set(tvPhoneLyrics, forKey: Keys.tvPhoneLyrics) } }
     /// `ArtworkBackground.rawValue`: what flows behind the big cover.
     var artworkBackground: String { didSet { defaults.set(artworkBackground, forKey: Keys.artworkBackground) } }
+    /// Full-screen Canvas with the big cover hidden, when the track has a video.
+    var artworkCanvas: Bool { didSet { defaults.set(artworkCanvas, forKey: Keys.artworkCanvas) } }
     /// One synced line under the big cover.
     var artworkLyricLine: Bool { didSet { defaults.set(artworkLyricLine, forKey: Keys.artworkLyricLine) } }
     /// `AutoSkipMode.rawValue`: skip songs without a Spicy Lyrics sync.
@@ -242,9 +246,12 @@ final class AppSettings {
     var refreshedSimpleLyrics: Bool { didSet { defaults.set(refreshedSimpleLyrics, forKey: Keys.refreshedSimpleLyrics) } }
     /// What the cover background shows: the flowing cover, the still cover, the artist, the Canvas.
     var backgroundStyle: String { didSet { defaults.set(backgroundStyle, forKey: Keys.backgroundStyle) } }
+    /// Visible video brightness: 0 is black, 1 is the original video.
+    var canvasBrightness: Double { didSet { defaults.set(canvasBrightness, forKey: Keys.canvasBrightness) } }
+    var showCanvas: Bool { didSet { defaults.set(showCanvas, forKey: Keys.showCanvas) } }
     var background: BackgroundStyle {
         let style = BackgroundStyle(rawValue: backgroundStyle) ?? .dynamic
-        return BackgroundStyle.offered.contains(style) ? style : .dynamic
+        return showCanvas ? .canvas : (BackgroundStyle.offered.contains(style) ? style : .dynamic)
     }
     /// Spicy Lyrics' "Refined Credits": quiet type under the last line instead of the old credit lines.
     var refinedCredits: Bool { didSet { defaults.set(refinedCredits, forKey: Keys.refinedCredits) } }
@@ -331,8 +338,10 @@ final class AppSettings {
             Keys.hideStatic: false,
             Keys.hiddenLyricsView: HiddenLyricsView.background.rawValue,
             Keys.artworkLyricLine: true,
+            Keys.artworkCanvas: false,
             Keys.nebulaColors: NebulaColors.cover.rawValue,
             Keys.nebulaStars: true,
+            Keys.nebulaBrightness: 1.0,
             Keys.tvLyricsScale: 1.0,
             Keys.tvOffsetMs: 0.0,
             Keys.tvShowNowBar: true,
@@ -370,6 +379,7 @@ final class AppSettings {
             Keys.creditsFollowLastLine: false,
             Keys.translationBrightness: 1.0,
             Keys.backgroundSaturation: 1.0,
+            Keys.canvasBrightness: 1 - Self.defaultBackgroundDim - 0.15,
             Keys.lyricsFrameRate: 60.0,
             Keys.showLyricsFPS: false,
             Keys.pipShowFPS: false,
@@ -427,8 +437,10 @@ final class AppSettings {
         hideStaticLyrics = defaults.bool(forKey: Keys.hideStatic)
         hiddenLyricsView = defaults.string(forKey: Keys.hiddenLyricsView) ?? HiddenLyricsView.background.rawValue
         artworkLyricLine = defaults.bool(forKey: Keys.artworkLyricLine)
+        artworkCanvas = defaults.bool(forKey: Keys.artworkCanvas)
         nebulaColors = defaults.string(forKey: Keys.nebulaColors) ?? NebulaColors.cover.rawValue
         nebulaStars = defaults.bool(forKey: Keys.nebulaStars)
+        nebulaBrightness = defaults.double(forKey: Keys.nebulaBrightness)
         tvLyricsScale = defaults.double(forKey: Keys.tvLyricsScale)
         tvOffsetMs = defaults.double(forKey: Keys.tvOffsetMs)
         tvShowNowBar = defaults.bool(forKey: Keys.tvShowNowBar)
@@ -461,6 +473,8 @@ final class AppSettings {
         keepOverlappingLines = defaults.bool(forKey: Keys.keepOverlappingLines)
         backgroundLinePop = defaults.bool(forKey: Keys.backgroundLinePop)
         refreshedSimpleLyrics = defaults.bool(forKey: Keys.refreshedSimpleLyrics)
+        canvasBrightness = defaults.double(forKey: Keys.canvasBrightness)
+        showCanvas = defaults.bool(forKey: Keys.showCanvas)
         let storedStyle = BackgroundStyle(rawValue: defaults.string(forKey: Keys.backgroundStyle) ?? "") ?? .dynamic
         // A style no longer offered (Canvas) goes back to the default, so Settings shows a choice.
         backgroundStyle = (BackgroundStyle.offered.contains(storedStyle) ? storedStyle : .dynamic).rawValue
@@ -593,7 +607,10 @@ final class AppSettings {
     }
 
     func resetBackground() {
+        nebulaBrightness = 1
         dynamicBackground = true
+        showCanvas = false
+        canvasBrightness = 1 - Self.defaultBackgroundDim - 0.15
         backgroundStyle = BackgroundStyle.dynamic.rawValue
         backgroundDim = Self.defaultBackgroundDim
         backgroundSpeed = 1
@@ -668,8 +685,10 @@ final class AppSettings {
         static let hideStatic = "hideStaticLyrics"
         static let hiddenLyricsView = "hiddenLyricsView"
         static let artworkLyricLine = "artworkLyricLine"
+        static let artworkCanvas = "artworkCanvas"
         static let nebulaColors = "nebulaColors"
         static let nebulaStars = "nebulaStars"
+        static let nebulaBrightness = "nebulaBrightness"
         static let tvLyricsScale = "tvLyricsScale"
         static let tvOffsetMs = "tvOffsetMs"
         static let tvShowNowBar = "tvShowNowBar"
@@ -704,6 +723,8 @@ final class AppSettings {
         static let keepOverlappingLines = "keepOverlappingLines"
         static let backgroundLinePop = "backgroundLinePop"
         static let refreshedSimpleLyrics = "refreshedSimpleLyrics"
+        static let canvasBrightness = "canvasBrightness"
+        static let showCanvas = "showCanvas"
         static let backgroundStyle = "backgroundStyle"
         static let seekFadeCompensation = "seekFadeCompensation"
         static let creditsFollowLastLine = "creditsFollowLastLine"

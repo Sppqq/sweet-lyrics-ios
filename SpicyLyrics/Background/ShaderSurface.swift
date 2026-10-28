@@ -6,7 +6,18 @@ import UIKit
 /// compositor stretches over the view (with linear filtering). Subclasses fill in the uniforms.
 class ShaderSurface: MTKView, MTKViewDelegate {
     static let sharedDevice = MTLCreateSystemDefaultDevice()
-    private static var library: MTLLibrary? = sharedDevice?.makeDefaultLibrary()
+    static let library: MTLLibrary? = {
+        guard let device = sharedDevice else { return nil }
+        if let library = device.makeDefaultLibrary() { return library }
+        #if SWIFT_PACKAGE
+        // xtool cannot compile Metal on Linux; compile the bundled source on the device.
+        guard let url = Bundle.main.url(forResource: "Shaders", withExtension: "metal"),
+              let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        return try? device.makeLibrary(source: source, options: nil)
+        #else
+        return nil
+        #endif
+    }()
     private static let commandQueue = sharedDevice?.makeCommandQueue()
 
     private var pipeline: MTLRenderPipelineState?

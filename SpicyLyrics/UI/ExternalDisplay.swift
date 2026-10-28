@@ -224,8 +224,10 @@ struct ExternalLyricsView: View {
             DynamicBackground(
                 image: settings.dynamicBackground ? player.backgroundArtwork : nil,
                 imageID: player.artworkID,
+                artistImage: player.artistImage,
+                canvasURL: player.canvasURL,
                 animated: settings.dynamicBackground && !reduced,
-                playing: player.isPlaying,
+                playing: player.isPlaying && !reduced,
                 dim: settings.tvBackgroundDim,
                 speed: settings.backgroundSpeed,
                 blur: settings.backgroundBlur,
