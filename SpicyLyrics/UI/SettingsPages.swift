@@ -23,7 +23,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case fontAndLines, animation, scrolling, translation, credits
     case themeAndBackground, playerScreen, noLyrics, landscape, gestures, pictureInPicture
     case musicSource, sync, lyricsSources
-    case performance, experiments, reports
+    case appIcon, performance, experiments, reports
     case about
 
     var id: String { rawValue }
@@ -34,7 +34,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .fontAndLines, .animation, .scrolling, .translation, .credits: return .lyrics
         case .themeAndBackground, .playerScreen, .noLyrics, .landscape, .gestures, .pictureInPicture: return .player
         case .musicSource, .sync, .lyricsSources: return .connection
-        case .performance, .experiments, .reports: return .other
+        case .appIcon, .performance, .experiments, .reports: return .other
         case .about: return nil
         }
     }
@@ -55,6 +55,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .musicSource: return String(localized: "Источник музыки")
         case .sync: return String(localized: "Синхронизация")
         case .lyricsSources: return String(localized: "Источники текстов")
+        case .appIcon: return String(localized: "Иконка приложения")
         case .performance: return String(localized: "Батарея и нагрев")
         case .experiments: return String(localized: "Эксперименты")
         case .reports: return String(localized: "Отчёты об ошибках")
@@ -78,6 +79,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .musicSource: return "music.note"
         case .sync: return "timer"
         case .lyricsSources: return "doc.text.fill"
+        case .appIcon: return "app.fill"
         case .performance: return "bolt.fill"
         case .experiments: return "flask.fill"
         case .reports: return "paperplane.fill"
@@ -101,6 +103,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .musicSource: return .pink
         case .sync: return .cyan
         case .lyricsSources: return .brown
+        case .appIcon: return .pink
         case .performance: return .yellow
         case .experiments: return .purple
         case .reports: return .mint
@@ -136,6 +139,9 @@ enum SettingsIndex {
             String(localized: "Язык перевода"), String(localized: "Размер перевода"), String(localized: "Яркость перевода"),
         ]) + on(.credits, [
             String(localized: "Новый вид титров"), String(localized: "Титры за последним исполнителем"),
+        ]) + on(.appIcon, [
+            String(localized: "Иконка приложения"), String(localized: "Оригинальная"),
+            String(localized: "Тёмная"), String(localized: "Разноцветная"),
         ]) + on(.themeAndBackground, [
             String(localized: "Тема"), String(localized: "Обложка на фоне"), String(localized: "Что на фоне"),
             String(localized: "Скорость движения"), String(localized: "Размытие"),

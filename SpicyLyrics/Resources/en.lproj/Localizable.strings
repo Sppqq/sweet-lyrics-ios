@@ -649,3 +649,14 @@
 "Яркость туманности" = "Nebula brightness";
 
 "Canvas на весь экран без обложки" = "Full-screen Canvas without artwork";
+
+/* App icon picker */
+"Иконка приложения" = "App Icon";
+"Оригинальная" = "Original";
+"Тёмная" = "Dark";
+"Разноцветная" = "Colorful";
+"Меняем иконку…" = "Changing icon…";
+"Иконка на экране «Домой» меняется независимо от темы приложения." = "The Home Screen icon changes independently of the app theme.";
+"В этой сборке смена иконки недоступна." = "Changing the icon is not available in this build.";
+"Не удалось сменить иконку" = "Could Not Change Icon";
+"Попробуйте ещё раз. Текущая иконка сохранена." = "Please try again. Your current icon is unchanged.";

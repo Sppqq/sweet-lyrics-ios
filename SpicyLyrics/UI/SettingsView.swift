@@ -74,6 +74,7 @@ struct SettingsView: View {
         case .credits: return nil
         case .themeAndBackground:
             return settings.dynamicBackground ? settings.appTheme.title : String(localized: "Выкл.")
+        case .appIcon: return nil
         case .playerScreen: return nil
         case .noLyrics:
             return AutoSkipMode(rawValue: settings.autoSkipMode).flatMap { $0 == .off ? nil : $0.title }
@@ -1299,6 +1300,7 @@ struct SettingsDestination: View {
         case .musicSource: MusicSourceSettings()
         case .sync: SyncSettings()
         case .lyricsSources: SourceSettings()
+        case .appIcon: AppIconSettings()
         case .performance: PerformanceSettings()
         case .experiments: ExperimentsSettings()
         case .reports: ReportSettings()
