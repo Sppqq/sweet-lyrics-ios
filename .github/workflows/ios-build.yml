@@ -50,6 +50,9 @@ jobs:
       - name: Test AltStore channels
         run: python3 -m unittest discover -s scripts -p 'test_altstore_source.py'
 
+      - name: Check alternate icon inputs
+        run: python3 scripts/check-app-icons.py
+
       - name: Work out the version
         id: v
         env:
@@ -168,6 +171,9 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             build
+
+      - name: Check packaged alternate icons
+        run: python3 scripts/check-app-icons.py build/Build/Products/Release-iphoneos/SpicyLyrics.app
 
       - name: Package IPA
         run: |

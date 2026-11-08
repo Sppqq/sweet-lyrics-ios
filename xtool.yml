@@ -6,3 +6,15 @@ resources:
   - SpicyLyrics/Resources/en.lproj
   - SpicyLyrics/Resources/ru.lproj
   - SpicyLyrics/Background/Shaders.metal
+  # Loose PNGs support previews and alternate icons without an asset compiler.
+  - Config/XtoolIcons/AppIconDark60x60@2x.png
+  - Config/XtoolIcons/AppIconDark60x60@3x.png
+  - Config/XtoolIcons/AppIconDark76x76@2x.png
+  - Config/XtoolIcons/AppIconDark83.5x83.5@2x.png
+  - Config/XtoolIcons/AppIconColorful60x60@2x.png
+  - Config/XtoolIcons/AppIconColorful60x60@3x.png
+  - Config/XtoolIcons/AppIconColorful76x76@2x.png
+  - Config/XtoolIcons/AppIconColorful83.5x83.5@2x.png
+  - SpicyLyrics/Resources/AppIconPreview.png
+  - SpicyLyrics/Resources/AppIconDarkPreview.png
+  - SpicyLyrics/Resources/AppIconColorfulPreview.png

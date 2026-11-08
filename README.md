@@ -184,3 +184,25 @@ Bao The Whale &amp; Neuro-sama — Mesmerizer, KIDSCRY2DAY — sleep mode.</sub>
 
 Licensed under **AGPL-3.0**, like the original projects. See [LICENSE](LICENSE).
 This is an unofficial project, not affiliated with Spotify or the creators of Spicy Lyrics.
+
+### App icons
+
+Open **Settings → Other → App Icon** to choose Original (the existing pink icon), Dark,
+or Colorful. The choice changes the Home Screen icon independently of the player theme.
+iOS keeps the selection between launches. The page is also available through settings search.
+
+<p>
+  <img src="SpicyLyrics/Resources/AppIconPreview.png" width="90" alt="Original pink icon">
+  <img src="SpicyLyrics/Resources/AppIconDarkPreview.png" width="90" alt="Dark icon">
+  <img src="SpicyLyrics/Resources/AppIconColorfulPreview.png" width="90" alt="Colorful icon">
+</p>
+
+The original asset is unchanged. Editable SVG variants live in `scripts/app-icons/`;
+regenerate their checked-in PNGs with `python3 scripts/generate-app-icons.py`
+(requires `rsvg-convert` and Pillow). Xcode compiles alternate app icon sets;
+xtool uses the matching loose PNGs declared in its plist and resource list.
+Run `python3 scripts/check-app-icons.py` to check the source icons, or pass a built
+`.app` directory to verify the packaged iPhone/iPad metadata and image files.
+
+Device check: switch between all three icons, relaunch to check the selection,
+return to Original, and repeat on iPad. iOS may show its own confirmation alert.

@@ -1299,6 +1299,7 @@ struct SettingsDestination: View {
         case .musicSource: MusicSourceSettings()
         case .sync: SyncSettings()
         case .lyricsSources: SourceSettings()
+        case .appIcon: AppIconSettings()
         case .performance: PerformanceSettings()
         case .experiments: ExperimentsSettings()
         case .reports: ReportSettings()
